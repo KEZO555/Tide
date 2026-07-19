@@ -45,9 +45,17 @@ jobs:
           name: tide-apks
           path: dist/*.apk
 
+      - name: Read tool version
+        id: version
+        run: |
+          v=$(grep -oP 'versionName = "\K[^"]+' tool/lighttool.toml)
+          echo "name=$v" >> "$GITHUB_OUTPUT"
+
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.ref == 'refs/heads/claude/tidal-light-phone-3-ph30s1' || startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.name }}
+          target_commitish: ${{ github.sha }}
           files: dist/*.apk
           generate_release_notes: true
