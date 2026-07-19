@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 // ---------- domain models ----------
 
+@kotlinx.serialization.Serializable
 data class Track(
     val id: Long,
     val title: String,

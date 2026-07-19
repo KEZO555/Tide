@@ -68,7 +68,7 @@ class TrackOptionsScreen(
                 if (track.albumId != 0L) {
                     ActionRow(text = "Go to Album", onClick = {
                         navigateTo({
-                            TrackListScreen(it, track.albumTitle.ifBlank { "Album" }) {
+                            TrackListScreen(it, track.albumTitle.ifBlank { "Album" }, numbered = true) {
                                 Tidal.albumTracks(track.albumId)
                             }
                         })

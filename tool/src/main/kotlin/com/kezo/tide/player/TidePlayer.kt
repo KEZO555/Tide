@@ -164,6 +164,7 @@ object TidePlayer {
         _isPlaying.value = false
         _error.value = null
         prepared = false
+        Recents.record(track)
 
         loadJob = scope.launch {
             val url = try {

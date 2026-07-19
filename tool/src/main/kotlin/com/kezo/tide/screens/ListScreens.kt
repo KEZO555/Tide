@@ -55,6 +55,7 @@ class ListViewModel<T>(private val loader: suspend () -> List<T>) : LightViewMod
 class TrackListScreen(
     sealedActivity: SealedLightActivity,
     private val title: String,
+    private val numbered: Boolean = false,
     private val loader: suspend () -> List<Track>,
 ) : LightScreen<Unit, ListViewModel<Track>>(sealedActivity) {
 
@@ -92,7 +93,7 @@ class TrackListScreen(
                             items(s.value.size) { i ->
                                 val track = s.value[i]
                                 NumberedTrackRow(
-                                    number = i + 1,
+                                    number = if (numbered) i + 1 else null,
                                     track = track,
                                     active = current?.id == track.id,
                                     onClick = {
@@ -157,7 +158,9 @@ class AlbumListScreen(
                                         .joinToString(" · "),
                                     onClick = {
                                         navigateTo({
-                                            TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
+                                            TrackListScreen(it, album.title, numbered = true) {
+                                                Tidal.albumTracks(album.id)
+                                            }
                                         })
                                     },
                                 )

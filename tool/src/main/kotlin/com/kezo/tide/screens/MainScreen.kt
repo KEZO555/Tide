@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ import com.kezo.tide.api.AuthPendingException
 import com.kezo.tide.api.SearchResults
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Recents
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
@@ -75,7 +77,7 @@ import kotlinx.coroutines.launch
 
 private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
 
-enum class MainTab { Liked, Albums, Playlists, Search, Settings }
+enum class MainTab { Home, Liked, Albums, Playlists, Search, Settings }
 
 class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() {
 
@@ -94,7 +96,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     }
 
     val session = MutableStateFlow<Session>(Session.Loading)
-    val tab = MutableStateFlow(MainTab.Liked)
+    val tab = MutableStateFlow(MainTab.Home)
 
     val liked = MutableStateFlow<UiState<List<Track>>>(UiState.Loading)
     val albums = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
@@ -110,6 +112,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
 
     init {
         Tidal.init(dataStore)
+        Recents.init(dataStore)
         viewModelScope.launch {
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
@@ -229,23 +232,26 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
 
     fun signOut() {
         TidePlayer.stop()
+        Recents.clear()
         viewModelScope.launch {
             Tidal.logout()
             loadedTabs.clear()
             liked.value = UiState.Loading
             albums.value = UiState.Loading
             playlists.value = UiState.Loading
-            tab.value = MainTab.Liked
+            tab.value = MainTab.Home
             session.value = Session.LoggedOut()
         }
     }
 
     override fun onBackPressed(): Boolean {
-        if (session.value is Session.Ready &&
-            tab.value == MainTab.Search &&
-            searchMode.value !is SearchMode.Input
-        ) {
+        if (session.value !is Session.Ready) return false
+        if (tab.value == MainTab.Search && searchMode.value !is SearchMode.Input) {
             newSearch()
+            return true
+        }
+        if (tab.value != MainTab.Home) {
+            tab.value = MainTab.Home
             return true
         }
         return false
@@ -347,6 +353,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
+                MainTab.Home -> HomeTab()
                 MainTab.Liked -> LikedTab()
                 MainTab.Albums -> AlbumsTab()
                 MainTab.Playlists -> PlaylistsTab()
@@ -357,6 +364,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
         TabBar(
             tabs = listOf(
+                TabIcon.Vector(Icons.Filled.Home) to (tab == MainTab.Home),
                 TabIcon.Vector(Icons.Filled.Favorite) to (tab == MainTab.Liked),
                 TabIcon.Vector(Icons.Filled.Album) to (tab == MainTab.Albums),
                 TabIcon.Light(LightIcons.LIST) to (tab == MainTab.Playlists),
@@ -381,6 +389,43 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     }
 
     @Composable
+    private fun ColumnScope.HomeTab() {
+        val recents by Recents.tracks.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        TabHeader("Tide")
+        if (recents.isEmpty()) {
+            LightText(
+                text = "Play something and it will show up here.",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+            )
+        } else {
+            SectionHeader("Recently Played")
+            LightLazyScrollView(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                uniformItemHeightGridUnits = ROW_UNITS,
+            ) {
+                items(recents.size) { i ->
+                    val track = recents[i]
+                    NumberedTrackRow(
+                        number = null,
+                        track = track,
+                        active = current?.id == track.id,
+                        onClick = {
+                            TidePlayer.play(recents, i)
+                            navigateTo({ PlayerScreen(it) })
+                        },
+                        onLongClick = {
+                            navigateTo({ TrackOptionsScreen(it, track) })
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
     private fun ColumnScope.LikedTab() {
         val state by viewModel.liked.collectAsState()
         val current by TidePlayer.current.collectAsState()
@@ -399,7 +444,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         items(s.value.size) { i ->
                             val track = s.value[i]
                             NumberedTrackRow(
-                                number = i + 1,
+                                number = null,
                                 track = track,
                                 active = current?.id == track.id,
                                 onClick = {
@@ -441,7 +486,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                     .joinToString(" · "),
                                 onClick = {
                                     navigateTo({
-                                        TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
+                                        TrackListScreen(it, album.title, numbered = true) {
+                                            Tidal.albumTracks(album.id)
+                                        }
                                     })
                                 },
                             )
@@ -587,7 +634,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 SectionHeader("Tracks")
                 results.tracks.forEachIndexed { i, track ->
                     NumberedTrackRow(
-                        number = i + 1,
+                        number = null,
                         track = track,
                         active = currentTrackId == track.id,
                         onClick = {
@@ -620,7 +667,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                             .joinToString(" · "),
                         onClick = {
                             navigateTo({
-                                TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
+                                TrackListScreen(it, album.title, numbered = true) {
+                                    Tidal.albumTracks(album.id)
+                                }
                             })
                         },
                     )

@@ -194,7 +194,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                         if (t.albumId != 0L) {
                                             Modifier.lightClickable {
                                                 navigateTo({ a ->
-                                                    TrackListScreen(a, t.albumTitle.ifBlank { "Album" }) {
+                                                    TrackListScreen(a, t.albumTitle.ifBlank { "Album" }, numbered = true) {
                                                         Tidal.albumTracks(t.albumId)
                                                     }
                                                 })
@@ -490,7 +490,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                 ) {
                     items(queue.size) { i ->
                         NumberedTrackRow(
-                            number = i + 1,
+                            number = null,
                             track = queue[i],
                             active = i == index,
                             onClick = { TidePlayer.jumpTo(i) },

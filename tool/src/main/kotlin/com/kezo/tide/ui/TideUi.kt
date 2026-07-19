@@ -111,7 +111,7 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NumberedTrackRow(
-    number: Int,
+    number: Int?,
     track: Track,
     onClick: () -> Unit,
     active: Boolean = false,
@@ -130,15 +130,17 @@ fun NumberedTrackRow(
             .padding(horizontal = 1f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LightText(
-            text = "$number.",
-            variant = LightTextVariant.Detail,
-            lighten = !active,
-            align = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier.width(2.2f.gridUnitsAsDp()),
-        )
-        Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
+        if (number != null) {
+            LightText(
+                text = "$number.",
+                variant = LightTextVariant.Detail,
+                lighten = !active,
+                align = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.width(2.2f.gridUnitsAsDp()),
+            )
+            Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             LightText(
                 text = track.title,
