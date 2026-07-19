@@ -347,7 +347,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             Box(modifier = Modifier.lightClickable { TidePlayer.toggle() }) {
                 LightIcon(
                     icon = if (isPlaying) LightIcons.PAUSE else LightIcons.PLAY,
-                    size = 3.2f,
+                    size = 2.6f,
                 )
             }
             Box(modifier = Modifier.lightClickable { TidePlayer.next() }) {
