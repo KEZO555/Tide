@@ -57,6 +57,7 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightText
@@ -129,15 +130,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             val t = track
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text(" "),
-                rightButton = if (t != null) {
-                    LightBarButton.LightIcon(
-                        LightIcons.LIST,
-                        onClick = { navigateTo({ a -> QueueScreen(a) }) },
-                    )
-                } else {
-                    null
-                },
             )
 
             Column(
@@ -163,8 +155,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         if (t != null) {
                             LightText(
                                 text = t.artist,
-                                variant = LightTextVariant.Fine,
-                                lighten = true,
+                                variant = LightTextVariant.Copy,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
@@ -184,7 +175,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             )
                             LightText(
                                 text = t.title,
-                                variant = LightTextVariant.Subheading,
+                                variant = LightTextVariant.Heading,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
@@ -210,7 +201,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                 align = TextAlign.Center,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 0.25f.gridUnitsAsDp()),
+                                    .padding(top = 0.6f.gridUnitsAsDp()),
                             )
                             val statusLine = when {
                                 isLoading -> "Loading..."
@@ -255,6 +246,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         saved = favorite == true,
                         saveEnabled = favorite != null,
                         onSaveTap = { viewModel.toggleFavorite(t) },
+                        onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
@@ -321,13 +313,12 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun TransportControls(isPlaying: Boolean) {
         val colors = LightThemeTokens.colors
-        val iconSize = 2.55f.gridUnitsAsDp()
         Row(
             modifier = Modifier.padding(
-                top = 0.75f.gridUnitsAsDp(),
+                top = 1.4f.gridUnitsAsDp(),
                 bottom = 1.3f.gridUnitsAsDp(),
             ),
-            horizontalArrangement = Arrangement.spacedBy(3.3f.gridUnitsAsDp()),
+            horizontalArrangement = Arrangement.spacedBy(3.6f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -335,7 +326,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 contentDescription = "Previous",
                 tint = colors.content,
                 modifier = Modifier
-                    .size(iconSize)
+                    .size(2.2f.gridUnitsAsDp())
                     .lightClickable { TidePlayer.previous() },
             )
             Icon(
@@ -343,7 +334,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 contentDescription = "Play/Pause",
                 tint = colors.content,
                 modifier = Modifier
-                    .size(iconSize)
+                    .size(3.2f.gridUnitsAsDp())
                     .lightClickable { TidePlayer.toggle() },
             )
             Icon(
@@ -351,7 +342,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 contentDescription = "Next",
                 tint = colors.content,
                 modifier = Modifier
-                    .size(iconSize)
+                    .size(2.2f.gridUnitsAsDp())
                     .lightClickable { TidePlayer.next() },
             )
         }
@@ -364,6 +355,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         saved: Boolean,
         saveEnabled: Boolean,
         onSaveTap: () -> Unit,
+        onOpenQueue: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
         Row(
@@ -388,6 +380,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 contentDescription = "Repeat",
                 onClick = { TidePlayer.cycleRepeat() },
             )
+            Box(modifier = Modifier.lightClickable(onClick = onOpenQueue)) {
+                LightIcon(icon = LightIcons.LIST, size = 1.9f)
+            }
         }
     }
 
