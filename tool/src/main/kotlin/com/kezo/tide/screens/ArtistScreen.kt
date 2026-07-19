@@ -2,7 +2,6 @@ package com.kezo.tide.screens
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -12,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
+import com.kezo.tide.ui.TextButton
 import com.kezo.tide.ui.TideScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
@@ -23,7 +23,6 @@ import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
-import com.thelightphone.sdk.ui.lightClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -52,7 +51,7 @@ class ArtistViewModel(private val artist: Artist) : LightViewModel<Unit>() {
                 favorite.value = !currently
                 status.value = null
             } catch (e: Exception) {
-                status.value = e.message ?: "couldn't update favorite"
+                status.value = e.message ?: "Couldn't update favorite"
             }
         }
     }
@@ -79,46 +78,35 @@ class ArtistScreen(
                 center = LightTopBarCenter.Text(artist.name),
             )
             Column(modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp())) {
-                Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
-                Item("top tracks") {
+                Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
+                TextButton(text = "Top Tracks", onClick = {
                     navigateTo({
                         TrackListScreen(it, artist.name) { Tidal.artistTopTracks(artist.id) }
                     })
-                }
-                Item("albums") {
+                })
+                TextButton(text = "Albums", onClick = {
                     navigateTo({
                         AlbumListScreen(it, artist.name) { Tidal.artistAlbums(artist.id) }
                     })
-                }
-                Item(
-                    when (favorite) {
-                        true -> "unfavorite"
-                        false -> "favorite"
-                        null -> "favorite…"
-                    }
-                ) { viewModel.toggleFavorite() }
+                })
+                TextButton(
+                    text = when (favorite) {
+                        true -> "Unfavorite"
+                        false -> "Favorite"
+                        null -> "Favorite..."
+                    },
+                    onClick = { viewModel.toggleFavorite() },
+                )
 
                 status?.let {
                     LightText(
                         text = it,
-                        variant = LightTextVariant.Detail,
+                        variant = LightTextVariant.Superfine,
                         lighten = true,
                         modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                     )
                 }
             }
         }
-    }
-
-    @Composable
-    private fun Item(label: String, onClick: () -> Unit) {
-        LightText(
-            text = label,
-            variant = LightTextVariant.Copy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .lightClickable(onClick = onClick)
-                .padding(vertical = 0.6f.gridUnitsAsDp()),
-        )
     }
 }

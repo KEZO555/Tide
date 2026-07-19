@@ -8,17 +8,16 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Album
 import com.kezo.tide.api.Artist
-import com.kezo.tide.api.Playlist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
+import com.kezo.tide.ui.MediaRow
+import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.TideScreen
-import com.kezo.tide.ui.TrackRow
-import com.kezo.tide.ui.TwoLineRow
 import com.kezo.tide.ui.UiState
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
@@ -46,13 +45,13 @@ class ListViewModel<T>(private val loader: suspend () -> List<T>) : LightViewMod
             state.value = try {
                 UiState.Data(loader())
             } catch (e: Exception) {
-                UiState.Failed(e.message ?: "something went wrong")
+                UiState.Failed(e.message ?: "Something went wrong")
             }
         }
     }
 }
 
-/** Any screen that shows a tappable list of tracks: favorites, album, playlist, top tracks. */
+/** Any screen that shows a tappable list of tracks: an album, playlist, or top tracks. */
 class TrackListScreen(
     sealedActivity: SealedLightActivity,
     private val title: String,
@@ -80,7 +79,7 @@ class TrackListScreen(
                 is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::load)
                 is UiState.Data -> {
                     if (s.value.isEmpty()) {
-                        EmptyText("nothing here yet")
+                        EmptyText("Nothing here yet")
                     } else {
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -88,7 +87,8 @@ class TrackListScreen(
                         ) {
                             items(s.value.size) { i ->
                                 val track = s.value[i]
-                                TrackRow(
+                                NumberedTrackRow(
+                                    number = i + 1,
                                     track = track,
                                     active = current?.id == track.id,
                                     onClick = {
@@ -105,7 +105,7 @@ class TrackListScreen(
     }
 }
 
-/** Favorite albums or an artist's discography. */
+/** An artist's discography. */
 class AlbumListScreen(
     sealedActivity: SealedLightActivity,
     private val title: String,
@@ -131,7 +131,7 @@ class AlbumListScreen(
                 is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::load)
                 is UiState.Data -> {
                     if (s.value.isEmpty()) {
-                        EmptyText("nothing here yet")
+                        EmptyText("Nothing here yet")
                     } else {
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -139,11 +139,11 @@ class AlbumListScreen(
                         ) {
                             items(s.value.size) { i ->
                                 val album = s.value[i]
-                                TwoLineRow(
+                                MediaRow(
                                     primary = album.title,
                                     secondary = listOf(album.artist, album.year)
                                         .filter { it.isNotBlank() }
-                                        .joinToString("  ·  "),
+                                        .joinToString(" · "),
                                     onClick = {
                                         navigateTo({
                                             TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
@@ -159,7 +159,7 @@ class AlbumListScreen(
     }
 }
 
-/** The user's favorite artists. */
+/** The user's favorite artists (reached from Settings, echo-style). */
 class ArtistListScreen(
     sealedActivity: SealedLightActivity,
 ) : LightScreen<Unit, ListViewModel<Artist>>(sealedActivity) {
@@ -176,14 +176,14 @@ class ArtistListScreen(
         TideScreen {
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text("artists"),
+                center = LightTopBarCenter.Text("Artists"),
             )
             when (val s = state) {
                 is UiState.Loading -> LoadingText()
                 is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::load)
                 is UiState.Data -> {
                     if (s.value.isEmpty()) {
-                        EmptyText("nothing here yet")
+                        EmptyText("Nothing here yet")
                     } else {
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -191,62 +191,10 @@ class ArtistListScreen(
                         ) {
                             items(s.value.size) { i ->
                                 val artist = s.value[i]
-                                TwoLineRow(
+                                MediaRow(
                                     primary = artist.name,
                                     secondary = "",
                                     onClick = { navigateTo({ ArtistScreen(it, artist) }) },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** The user's own + favorited playlists. */
-class PlaylistListScreen(
-    sealedActivity: SealedLightActivity,
-) : LightScreen<Unit, ListViewModel<Playlist>>(sealedActivity) {
-
-    @Suppress("UNCHECKED_CAST")
-    override val viewModelClass: Class<ListViewModel<Playlist>>
-        get() = ListViewModel::class.java as Class<ListViewModel<Playlist>>
-
-    override fun createViewModel() = ListViewModel { Tidal.playlists() }
-
-    @Composable
-    override fun Content() {
-        val state by viewModel.state.collectAsState()
-        TideScreen {
-            LightTopBar(
-                leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text("playlists"),
-            )
-            when (val s = state) {
-                is UiState.Loading -> LoadingText()
-                is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::load)
-                is UiState.Data -> {
-                    if (s.value.isEmpty()) {
-                        EmptyText("nothing here yet")
-                    } else {
-                        LightLazyScrollView(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            uniformItemHeightGridUnits = ROW_UNITS,
-                        ) {
-                            items(s.value.size) { i ->
-                                val playlist = s.value[i]
-                                TwoLineRow(
-                                    primary = playlist.title,
-                                    secondary = "${playlist.numberOfTracks} tracks",
-                                    onClick = {
-                                        navigateTo({
-                                            TrackListScreen(it, playlist.title) {
-                                                Tidal.playlistTracks(playlist.uuid)
-                                            }
-                                        })
-                                    },
                                 )
                             }
                         }

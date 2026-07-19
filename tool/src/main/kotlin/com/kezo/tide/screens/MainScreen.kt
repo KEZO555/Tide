@@ -1,0 +1,638 @@
+package com.kezo.tide.screens
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.lifecycle.viewModelScope
+import com.kezo.tide.api.AuthPendingException
+import com.kezo.tide.api.SearchResults
+import com.kezo.tide.api.Tidal
+import com.kezo.tide.api.Track
+import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.EmptyText
+import com.kezo.tide.ui.ErrorRetry
+import com.kezo.tide.ui.LoadingText
+import com.kezo.tide.ui.MediaRow
+import com.kezo.tide.ui.NumberedTrackRow
+import com.kezo.tide.ui.ROW_UNITS
+import com.kezo.tide.ui.SectionHeader
+import com.kezo.tide.ui.TabBar
+import com.kezo.tide.ui.TextButton
+import com.kezo.tide.ui.TideScreen
+import com.kezo.tide.ui.UiState
+import com.thelightphone.sdk.InitialScreen
+import com.thelightphone.sdk.LightScreen
+import com.thelightphone.sdk.LightViewModel
+import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.rememberKeyboardOptions
+import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightLazyScrollView
+import com.thelightphone.sdk.ui.LightScrollView
+import com.thelightphone.sdk.ui.LightText
+import com.thelightphone.sdk.ui.LightTextInputEditor
+import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.LightThemeColors
+import com.thelightphone.sdk.ui.LightThemeController
+import com.thelightphone.sdk.ui.LightTopBar
+import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.gridUnitsAsDp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+
+private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
+
+enum class MainTab { Liked, Albums, Playlists, Search, Settings }
+
+class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() {
+
+    sealed interface Session {
+        data object Loading : Session
+        data class LoggedOut(val error: String? = null) : Session
+        data class Linking(val code: String, val uri: String) : Session
+        data object Ready : Session
+    }
+
+    sealed interface SearchMode {
+        data object Input : SearchMode
+        data class Searching(val query: String) : SearchMode
+        data class Results(val query: String, val results: SearchResults) : SearchMode
+        data class Failed(val query: String, val message: String) : SearchMode
+    }
+
+    val session = MutableStateFlow<Session>(Session.Loading)
+    val tab = MutableStateFlow(MainTab.Liked)
+
+    val liked = MutableStateFlow<UiState<List<Track>>>(UiState.Loading)
+    val albums = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
+    val playlists = MutableStateFlow<UiState<List<com.kezo.tide.api.Playlist>>>(UiState.Loading)
+
+    val searchMode = MutableStateFlow<SearchMode>(SearchMode.Input)
+    var searchSession = 0
+        private set
+
+    val quality = MutableStateFlow("HIGH")
+
+    private val loadedTabs = HashSet<MainTab>()
+
+    init {
+        Tidal.init(dataStore)
+        viewModelScope.launch {
+            if (Tidal.restore()) {
+                quality.value = Tidal.quality
+                session.value = Session.Ready
+                ensureLoaded(MainTab.Liked)
+            } else {
+                session.value = Session.LoggedOut()
+            }
+        }
+    }
+
+    fun selectTab(t: MainTab) {
+        tab.value = t
+        ensureLoaded(t)
+    }
+
+    private fun ensureLoaded(t: MainTab) {
+        if (t in loadedTabs) return
+        when (t) {
+            MainTab.Liked -> reloadLiked()
+            MainTab.Albums -> reloadAlbums()
+            MainTab.Playlists -> reloadPlaylists()
+            else -> return
+        }
+        loadedTabs.add(t)
+    }
+
+    fun reloadLiked() {
+        liked.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            liked.value = try {
+                UiState.Data(Tidal.favoriteTracks())
+            } catch (e: Exception) {
+                UiState.Failed(e.message ?: "Something went wrong")
+            }
+        }
+    }
+
+    fun reloadAlbums() {
+        albums.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            albums.value = try {
+                UiState.Data(Tidal.favoriteAlbums())
+            } catch (e: Exception) {
+                UiState.Failed(e.message ?: "Something went wrong")
+            }
+        }
+    }
+
+    fun reloadPlaylists() {
+        playlists.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            playlists.value = try {
+                UiState.Data(Tidal.playlists())
+            } catch (e: Exception) {
+                UiState.Failed(e.message ?: "Something went wrong")
+            }
+        }
+    }
+
+    // ---------- login ----------
+
+    fun startLink() {
+        session.value = Session.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val link = Tidal.startDeviceLogin()
+                session.value = Session.Linking(link.userCode, link.verificationUri)
+                var waitedMs = 0L
+                while (waitedMs < link.expiresInSec * 1000L) {
+                    delay(link.intervalSec * 1000L)
+                    waitedMs += link.intervalSec * 1000L
+                    try {
+                        Tidal.pollDeviceLogin(link.deviceCode)
+                        quality.value = Tidal.quality
+                        session.value = Session.Ready
+                        ensureLoaded(MainTab.Liked)
+                        return@launch
+                    } catch (_: AuthPendingException) {
+                        // user hasn't confirmed on the other device yet
+                    }
+                }
+                session.value = Session.LoggedOut("Link expired, try again")
+            } catch (e: Exception) {
+                session.value = Session.LoggedOut(e.message ?: "Couldn't reach TIDAL")
+            }
+        }
+    }
+
+    // ---------- search ----------
+
+    fun submitSearch(query: CharSequence) {
+        val q = query.toString().trim()
+        if (q.isEmpty()) return
+        searchMode.value = SearchMode.Searching(q)
+        viewModelScope.launch(Dispatchers.IO) {
+            searchMode.value = try {
+                SearchMode.Results(q, Tidal.search(q))
+            } catch (e: Exception) {
+                SearchMode.Failed(q, e.message ?: "Search failed")
+            }
+        }
+    }
+
+    fun newSearch() {
+        searchSession++
+        searchMode.value = SearchMode.Input
+    }
+
+    // ---------- settings ----------
+
+    fun cycleQuality() {
+        val next = QUALITIES[(QUALITIES.indexOf(quality.value) + 1).mod(QUALITIES.size)]
+        quality.value = next
+        viewModelScope.launch { Tidal.setQuality(next) }
+    }
+
+    fun signOut() {
+        TidePlayer.stop()
+        viewModelScope.launch {
+            Tidal.logout()
+            loadedTabs.clear()
+            liked.value = UiState.Loading
+            albums.value = UiState.Loading
+            playlists.value = UiState.Loading
+            tab.value = MainTab.Liked
+            session.value = Session.LoggedOut()
+        }
+    }
+
+    override fun onBackPressed(): Boolean {
+        if (session.value is Session.Ready &&
+            tab.value == MainTab.Search &&
+            searchMode.value !is SearchMode.Input
+        ) {
+            newSearch()
+            return true
+        }
+        return false
+    }
+}
+
+@InitialScreen
+class MainScreen(sealedActivity: SealedLightActivity) :
+    LightScreen<Unit, MainViewModel>(sealedActivity) {
+
+    override val viewModelClass: Class<MainViewModel>
+        get() = MainViewModel::class.java
+
+    override fun createViewModel() = MainViewModel(lightContext.dataStore)
+
+    @Composable
+    override fun Content() {
+        val session by viewModel.session.collectAsState()
+
+        TideScreen {
+            when (val s = session) {
+                is MainViewModel.Session.Loading -> {
+                    LightTopBar(center = LightTopBarCenter.Text("Tide"))
+                    LoadingText(modifier = Modifier.padding(top = 1f.gridUnitsAsDp()))
+                }
+
+                is MainViewModel.Session.LoggedOut -> LoggedOutContent(s.error)
+                is MainViewModel.Session.Linking -> LinkingContent(s.code, s.uri)
+                is MainViewModel.Session.Ready -> ReadyContent()
+            }
+        }
+    }
+
+    // ---------- login ----------
+
+    @Composable
+    private fun LoggedOutContent(error: String?) {
+        Column(modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp())) {
+            Spacer(modifier = Modifier.height(3f.gridUnitsAsDp()))
+            LightText(text = "Tide", variant = LightTextVariant.Subtitle)
+            LightText(
+                text = "A minimal TIDAL client for the Light Phone III.",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+            )
+            error?.let {
+                LightText(
+                    text = it,
+                    variant = LightTextVariant.Superfine,
+                    lighten = true,
+                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                )
+            }
+            Spacer(modifier = Modifier.height(2f.gridUnitsAsDp()))
+            TextButton(text = "Link TIDAL Account", onClick = viewModel::startLink)
+        }
+    }
+
+    @Composable
+    private fun LinkingContent(code: String, uri: String) {
+        Column(modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp())) {
+            Spacer(modifier = Modifier.height(2f.gridUnitsAsDp()))
+            LightText(
+                text = "On another device, visit",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+            )
+            LightText(
+                text = uri.removePrefix("https://"),
+                variant = LightTextVariant.Subheading,
+                modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+            )
+            LightText(
+                text = "Code",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(top = 2f.gridUnitsAsDp()),
+            )
+            LightText(
+                text = code,
+                variant = LightTextVariant.Subtitle,
+                monospace = true,
+            )
+            LightText(
+                text = "Waiting for confirmation...",
+                variant = LightTextVariant.Superfine,
+                lighten = true,
+                modifier = Modifier.padding(top = 2f.gridUnitsAsDp()),
+            )
+        }
+    }
+
+    // ---------- tabs ----------
+
+    @Composable
+    private fun ColumnScope.ReadyContent() {
+        val tab by viewModel.tab.collectAsState()
+        val searchMode by viewModel.searchMode.collectAsState()
+
+        // Search input takes the whole screen (the keyboard replaces the tab bar)
+        if (tab == MainTab.Search && searchMode is MainViewModel.SearchMode.Input) {
+            SearchInput()
+            return
+        }
+
+        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when (tab) {
+                MainTab.Liked -> LikedTab()
+                MainTab.Albums -> AlbumsTab()
+                MainTab.Playlists -> PlaylistsTab()
+                MainTab.Search -> SearchResultsTab()
+                MainTab.Settings -> SettingsTab()
+            }
+        }
+
+        TabBar(
+            tabs = listOf(
+                LightIcons.STAR to (tab == MainTab.Liked),
+                LightIcons.MEDIA to (tab == MainTab.Albums),
+                LightIcons.LIST to (tab == MainTab.Playlists),
+                LightIcons.SEARCH to (tab == MainTab.Search),
+                LightIcons.ELLIPSES to (tab == MainTab.Settings),
+            ),
+            onSelect = { i -> viewModel.selectTab(MainTab.entries[i]) },
+        )
+    }
+
+    @Composable
+    private fun TabHeader(title: String) {
+        val current by TidePlayer.current.collectAsState()
+        LightTopBar(
+            center = LightTopBarCenter.Text(title),
+            rightButton = if (current != null) {
+                LightBarButton.LightIcon(
+                    LightIcons.PLAY,
+                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                )
+            } else {
+                null
+            },
+        )
+    }
+
+    @Composable
+    private fun ColumnScope.LikedTab() {
+        val state by viewModel.liked.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        TabHeader("Liked Songs")
+        when (val s = state) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadLiked)
+            is UiState.Data -> {
+                if (s.value.isEmpty()) {
+                    EmptyText("No liked songs yet")
+                } else {
+                    LightLazyScrollView(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        uniformItemHeightGridUnits = ROW_UNITS,
+                    ) {
+                        items(s.value.size) { i ->
+                            NumberedTrackRow(
+                                number = i + 1,
+                                track = s.value[i],
+                                active = current?.id == s.value[i].id,
+                                onClick = {
+                                    TidePlayer.play(s.value, i)
+                                    navigateTo({ PlayerScreen(it) })
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ColumnScope.AlbumsTab() {
+        val state by viewModel.albums.collectAsState()
+        TabHeader("Albums")
+        when (val s = state) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadAlbums)
+            is UiState.Data -> {
+                if (s.value.isEmpty()) {
+                    EmptyText("No saved albums yet")
+                } else {
+                    LightLazyScrollView(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        uniformItemHeightGridUnits = ROW_UNITS,
+                    ) {
+                        items(s.value.size) { i ->
+                            val album = s.value[i]
+                            MediaRow(
+                                primary = album.title,
+                                secondary = listOf(album.artist, album.year)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · "),
+                                onClick = {
+                                    navigateTo({
+                                        TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
+                                    })
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun ColumnScope.PlaylistsTab() {
+        val state by viewModel.playlists.collectAsState()
+        TabHeader("Playlists")
+        when (val s = state) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadPlaylists)
+            is UiState.Data -> {
+                if (s.value.isEmpty()) {
+                    EmptyText("No playlists yet")
+                } else {
+                    LightLazyScrollView(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        uniformItemHeightGridUnits = ROW_UNITS,
+                    ) {
+                        items(s.value.size) { i ->
+                            val playlist = s.value[i]
+                            MediaRow(
+                                primary = playlist.title,
+                                secondary = "${playlist.numberOfTracks} tracks",
+                                onClick = {
+                                    navigateTo({
+                                        TrackListScreen(it, playlist.title) {
+                                            Tidal.playlistTracks(playlist.uuid)
+                                        }
+                                    })
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---------- search ----------
+
+    @Composable
+    private fun SearchInput() {
+        val textFieldState = rememberTextFieldState("")
+        val keyboardOptionsFlow = rememberKeyboardOptions()
+        LightTextInputEditor(
+            title = "Search",
+            editorKey = viewModel.searchSession,
+            state = textFieldState,
+            onSubmit = viewModel::submitSearch,
+            onBack = { viewModel.selectTab(MainTab.Liked) },
+            keyboardOptionsFlow = keyboardOptionsFlow,
+            submitIcon = LightIcons.SEARCH,
+            singleLine = true,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+
+    @Composable
+    private fun ColumnScope.SearchResultsTab() {
+        val mode by viewModel.searchMode.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        when (val m = mode) {
+            is MainViewModel.SearchMode.Input -> Unit
+            is MainViewModel.SearchMode.Searching -> {
+                SearchHeader(m.query)
+                LoadingText()
+            }
+
+            is MainViewModel.SearchMode.Failed -> {
+                SearchHeader(m.query)
+                ErrorRetry(m.message, onRetry = { viewModel.submitSearch(m.query) })
+            }
+
+            is MainViewModel.SearchMode.Results -> {
+                SearchHeader(m.query)
+                SearchResultsList(m.results, currentTrackId = current?.id)
+            }
+        }
+    }
+
+    @Composable
+    private fun SearchHeader(query: String) {
+        LightTopBar(
+            center = LightTopBarCenter.Text(query),
+            rightButton = LightBarButton.LightIcon(
+                LightIcons.SEARCH,
+                onClick = { viewModel.newSearch() },
+            ),
+        )
+    }
+
+    @Composable
+    private fun ColumnScope.SearchResultsList(
+        results: SearchResults,
+        currentTrackId: Long?,
+    ) {
+        val empty = results.tracks.isEmpty() && results.albums.isEmpty() &&
+            results.artists.isEmpty() && results.playlists.isEmpty()
+        if (empty) {
+            EmptyText("No results")
+            return
+        }
+        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (results.tracks.isNotEmpty()) {
+                SectionHeader("Tracks")
+                results.tracks.forEachIndexed { i, track ->
+                    NumberedTrackRow(
+                        number = i + 1,
+                        track = track,
+                        active = currentTrackId == track.id,
+                        onClick = {
+                            TidePlayer.play(results.tracks, i)
+                            navigateTo({ PlayerScreen(it) })
+                        },
+                    )
+                }
+            }
+            if (results.artists.isNotEmpty()) {
+                SectionHeader("Artists")
+                results.artists.forEach { artist ->
+                    MediaRow(
+                        primary = artist.name,
+                        secondary = "",
+                        onClick = { navigateTo({ ArtistScreen(it, artist) }) },
+                    )
+                }
+            }
+            if (results.albums.isNotEmpty()) {
+                SectionHeader("Albums")
+                results.albums.forEach { album ->
+                    MediaRow(
+                        primary = album.title,
+                        secondary = listOf(album.artist, album.year)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(it, album.title) { Tidal.albumTracks(album.id) }
+                            })
+                        },
+                    )
+                }
+            }
+            if (results.playlists.isNotEmpty()) {
+                SectionHeader("Playlists")
+                results.playlists.forEach { playlist ->
+                    MediaRow(
+                        primary = playlist.title,
+                        secondary = "${playlist.numberOfTracks} tracks",
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(it, playlist.title) {
+                                    Tidal.playlistTracks(playlist.uuid)
+                                }
+                            })
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    // ---------- settings ----------
+
+    @Composable
+    private fun ColumnScope.SettingsTab() {
+        val quality by viewModel.quality.collectAsState()
+        val themeColors by LightThemeController.colors.collectAsState()
+        TabHeader("Settings")
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 1f.gridUnitsAsDp()),
+        ) {
+            Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
+            TextButton(text = "Artists", onClick = { navigateTo({ ArtistListScreen(it) }) })
+            TextButton(
+                text = "Quality: " + when (quality) {
+                    "LOW" -> "Low"
+                    "LOSSLESS" -> "Lossless"
+                    else -> "High"
+                },
+                onClick = viewModel::cycleQuality,
+            )
+            TextButton(
+                text = "Theme: " +
+                    if (themeColors == LightThemeColors.Dark) "Dark" else "Light",
+                onClick = { LightThemeController.toggle() },
+            )
+            TextButton(text = "Logout", onClick = viewModel::signOut)
+            Spacer(modifier = Modifier.weight(1f))
+            LightText(
+                text = "Tide · An unofficial TIDAL client · User ${Tidal.userId}",
+                variant = LightTextVariant.Superfine,
+                lighten = true,
+                modifier = Modifier.padding(bottom = 0.5f.gridUnitsAsDp()),
+            )
+        }
+    }
+}

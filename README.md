@@ -1,4 +1,4 @@
-# tide
+# Tide
 
 An unofficial **TIDAL** music tool for the **Light Phone III**, built on the official
 [Light SDK](https://github.com/lightphone/light-sdk) and designed to look and feel
@@ -7,19 +7,23 @@ no noise. Just your music.
 
 ```
 ┌───────────────────────────┐
-│           tide            │
+│        Liked Songs      ▶ │
 │                           │
-│  search                   │
-│  favorites                │
-│  playlists                │
-│  albums                   │
-│  artists                  │
-│  now playing              │
-│  settings                 │
+│  1. Song Title            │
+│     Artist · 3:42         │
+│  2. Song Title            │
+│     Artist · 4:05         │
+│  3. Song Title            │
+│     Artist · 2:58         │
 │                           │
-│  · currently playing song │
+│  ★    ◉    ☰    🔍   ⋯   │
 └───────────────────────────┘
 ```
+
+The UI follows the design language of [echo](https://github.com/KEZO555/echo),
+a Spotify client for the LP3: Public Sans type, icon tab bar (Liked Songs /
+Albums / Playlists / Search / Settings), numbered track rows, and a solid
+seek line on the Now Playing screen. Light and dark themes included.
 
 ## What it does
 
@@ -30,8 +34,7 @@ no noise. Just your music.
 - **Browse your library**: favorite tracks, albums, artists, and your playlists
   (own + followed).
 - **Artist pages**: top tracks and full discography.
-- **Playback**: play/pause, next/previous, tap-to-seek on a dotted LightOS-style
-  progress line, shuffle, repeat (off / all / one), and a live queue you can jump
+- **Playback**: play/pause, next/previous, tap-to-seek on the progress line, shuffle, repeat (off / all / one), and a live queue you can jump
   around in.
 - **Favorites management**: star/unstar tracks from the player, favorite/unfavorite
   artists.

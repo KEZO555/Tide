@@ -1,19 +1,21 @@
 package com.kezo.tide.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewModelScope
@@ -21,23 +23,26 @@ import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.player.RepeatMode
 import com.kezo.tide.player.TidePlayer
-import com.kezo.tide.ui.CenteredTimeRow
-import com.kezo.tide.ui.DottedProgress
 import com.kezo.tide.ui.EmptyText
+import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.ROW_UNITS
+import com.kezo.tide.ui.SolidProgress
 import com.kezo.tide.ui.TideScreen
-import com.kezo.tide.ui.TrackRow
+import com.kezo.tide.ui.TimeRow
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcon
+import com.thelightphone.sdk.ui.LightIconConfiguration
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.designVerticalPxToDp
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +75,11 @@ class PlayerViewModel : LightViewModel<Unit>() {
     }
 }
 
+/**
+ * Echo's Playing screen: centered title/artist, solid progress line with times,
+ * a space-between controls row (shuffle · prev · play · next · repeat) with
+ * underline indicators on the toggles, and the favorite control centered below.
+ */
 class PlayerScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, PlayerViewModel>(sealedActivity) {
 
@@ -97,18 +107,16 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         TideScreen {
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text("now playing"),
-                rightButton = track?.let { t ->
-                    LightBarButton.LightIcon(
-                        if (favorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
-                        onClick = { viewModel.toggleFavorite(t) },
-                    )
-                },
+                center = LightTopBarCenter.Text("Now Playing"),
+                rightButton = LightBarButton.LightIcon(
+                    LightIcons.LIST,
+                    onClick = { navigateTo({ a -> QueueScreen(a) }) },
+                ),
             )
 
             val t = track
             if (t == null) {
-                EmptyText("nothing playing")
+                EmptyText("Nothing playing")
                 return@TideScreen
             }
 
@@ -122,100 +130,123 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             ) {
                 LightText(
                     text = t.title,
-                    variant = LightTextVariant.Subheading,
+                    variant = LightTextVariant.Fine,
                     align = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 LightText(
                     text = t.artist,
-                    variant = LightTextVariant.Copy,
+                    variant = LightTextVariant.Superfine,
                     lighten = true,
                     align = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                    modifier = Modifier.padding(top = 0.4f.gridUnitsAsDp()),
                 )
-                if (t.albumTitle.isNotBlank()) {
+                val statusLine = when {
+                    isLoading -> "Loading..."
+                    playbackError != null -> playbackError
+                    else -> null
+                }
+                statusLine?.let {
                     LightText(
-                        text = t.albumTitle,
-                        variant = LightTextVariant.Detail,
+                        text = it,
+                        variant = LightTextVariant.Superfine,
                         lighten = true,
                         align = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                     )
                 }
-                val statusLine = when {
-                    isLoading -> "loading…"
-                    playbackError != null -> playbackError ?: ""
-                    else -> Tidal.quality.lowercase() + if (t.explicit) "  ·  explicit" else ""
-                }
-                LightText(
-                    text = statusLine,
-                    variant = LightTextVariant.Superfine,
-                    lighten = true,
-                    align = TextAlign.Center,
-                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-                )
             }
 
             Column(modifier = Modifier.padding(horizontal = 1.5f.gridUnitsAsDp())) {
-                DottedProgress(
+                SolidProgress(
                     fraction = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f,
                     onSeekFraction = TidePlayer::seekToFraction,
                 )
-                CenteredTimeRow(positionMs = positionMs, durationMs = durationMs)
+                TimeRow(positionMs = positionMs, durationMs = durationMs)
             }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 1f.gridUnitsAsDp()),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                    .padding(horizontal = 1.5f.gridUnitsAsDp())
+                    .padding(top = 0.6f.gridUnitsAsDp()),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                LightIcon(
+                ToggleIcon(
                     icon = LightIcons.SHUFFLE,
-                    modifier = Modifier
-                        .alpha(if (shuffle) 1f else 0.35f)
-                        .lightClickable { TidePlayer.toggleShuffle() },
+                    active = shuffle,
+                    onClick = { TidePlayer.toggleShuffle() },
                 )
-                LightIcon(
-                    icon = LightIcons.REWIND,
-                    modifier = Modifier.lightClickable { TidePlayer.previous() },
-                )
-                LightIcon(
-                    icon = if (isPlaying) LightIcons.PAUSE else LightIcons.PLAY,
-                    size = 3f,
-                    modifier = Modifier.lightClickable { TidePlayer.toggle() },
-                )
-                LightIcon(
-                    icon = LightIcons.FAST_FORWARD,
-                    modifier = Modifier.lightClickable { TidePlayer.next() },
-                )
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier
-                        .alpha(if (repeat != RepeatMode.OFF) 1f else 0.35f)
-                        .lightClickable { TidePlayer.cycleRepeat() },
-                ) {
-                    LightIcon(icon = LightIcons.LOOP)
-                    if (repeat == RepeatMode.ONE) {
-                        LightText(text = "1", variant = LightTextVariant.Superfine)
-                    }
+                Box(modifier = Modifier.lightClickable { TidePlayer.previous() }) {
+                    LightIcon(icon = LightIcons.REWIND, size = 2.6f)
                 }
+                Box(modifier = Modifier.lightClickable { TidePlayer.toggle() }) {
+                    LightIcon(
+                        icon = if (isPlaying) LightIcons.PAUSE else LightIcons.PLAY,
+                        size = 2.6f,
+                    )
+                }
+                Box(modifier = Modifier.lightClickable { TidePlayer.next() }) {
+                    LightIcon(icon = LightIcons.FAST_FORWARD, size = 2.6f)
+                }
+                ToggleIcon(
+                    icon = LightIcons.LOOP,
+                    active = repeat != RepeatMode.OFF,
+                    badge = if (repeat == RepeatMode.ONE) "1" else null,
+                    onClick = { TidePlayer.cycleRepeat() },
+                )
             }
 
-            LightText(
-                text = "queue",
-                variant = LightTextVariant.Detail,
-                lighten = true,
-                align = TextAlign.Center,
+            // echo's musicControlsExtra: favorite centered below the controls
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .lightClickable { navigateTo({ QueueScreen(it) }) }
-                    .padding(bottom = 1f.gridUnitsAsDp()),
+                    .padding(top = 0.8f.gridUnitsAsDp(), bottom = 1f.gridUnitsAsDp()),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Box(
+                    modifier = Modifier.lightClickable {
+                        viewModel.toggleFavorite(t)
+                    },
+                ) {
+                    LightIcon(
+                        icon = if (favorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
+                        size = 1.5f,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Icon with echo's thin active-state underline indicator beneath it. */
+    @Composable
+    private fun ToggleIcon(
+        icon: LightIconConfiguration,
+        active: Boolean,
+        onClick: () -> Unit,
+        badge: String? = null,
+    ) {
+        val color = LightThemeTokens.colors.content
+        Column(
+            modifier = Modifier.lightClickable(onClick = onClick),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                LightIcon(icon = icon, size = 1.5f)
+                badge?.let {
+                    LightText(text = it, variant = LightTextVariant.Micro)
+                }
+            }
+            Spacer(modifier = Modifier.height(0.15f.gridUnitsAsDp()))
+            Box(
+                modifier = Modifier
+                    .width(1.5f.gridUnitsAsDp())
+                    .height(3f.designVerticalPxToDp())
+                    .background(if (active) color else color.copy(alpha = 0f)),
             )
         }
     }
@@ -239,17 +270,18 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
         TideScreen {
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text("queue"),
+                center = LightTopBarCenter.Text("Queue"),
             )
             if (queue.isEmpty()) {
-                EmptyText("queue is empty")
+                EmptyText("Queue is empty")
             } else {
                 LightLazyScrollView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     uniformItemHeightGridUnits = ROW_UNITS,
                 ) {
                     items(queue.size) { i ->
-                        TrackRow(
+                        NumberedTrackRow(
+                            number = i + 1,
                             track = queue[i],
                             active = i == index,
                             onClick = { TidePlayer.jumpTo(i) },
@@ -257,7 +289,6 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
         }
     }
 }
