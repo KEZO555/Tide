@@ -35,6 +35,7 @@ import com.kezo.tide.api.SearchResults
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
@@ -42,10 +43,12 @@ import com.kezo.tide.ui.MediaRow
 import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.SectionHeader
+import com.kezo.tide.ui.SectionLabel
 import com.kezo.tide.ui.TabBar
 import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
 import com.kezo.tide.ui.TideScreen
+import com.kezo.tide.ui.ToggleRow
 import com.kezo.tide.ui.UiState
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
@@ -217,10 +220,10 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
 
     // ---------- settings ----------
 
-    fun cycleQuality() {
-        val next = QUALITIES[(QUALITIES.indexOf(quality.value) + 1).mod(QUALITIES.size)]
-        quality.value = next
-        viewModelScope.launch { Tidal.setQuality(next) }
+    fun setQuality(value: String) {
+        if (value !in QUALITIES) return
+        quality.value = value
+        viewModelScope.launch { Tidal.setQuality(value) }
     }
 
     fun signOut() {
@@ -634,36 +637,91 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun ColumnScope.SettingsTab() {
         val quality by viewModel.quality.collectAsState()
         val themeColors by LightThemeController.colors.collectAsState()
+        var confirmLogout by remember { mutableStateOf(false) }
+
+        if (confirmLogout) {
+            ConfirmContent(
+                title = "Logout",
+                message = "Are you sure you want to logout?",
+                confirmText = "Logout",
+                onConfirm = {
+                    confirmLogout = false
+                    viewModel.signOut()
+                },
+                onCancel = { confirmLogout = false },
+            )
+            return
+        }
+
         TabHeader("Settings")
+        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1f.gridUnitsAsDp()),
+            ) {
+                SectionLabel("Appearance")
+                ToggleRow(
+                    label = "Dark mode",
+                    checked = themeColors == LightThemeColors.Dark,
+                    onToggle = { LightThemeController.toggle() },
+                )
+
+                SectionLabel("Audio quality")
+                listOf(
+                    "LOW" to "Low (96 kbps)",
+                    "HIGH" to "High (320 kbps)",
+                    "LOSSLESS" to "Lossless (FLAC)",
+                ).forEach { (value, label) ->
+                    ActionRow(
+                        text = label,
+                        selected = quality == value,
+                        onClick = { viewModel.setQuality(value) },
+                    )
+                }
+
+                SectionLabel("Library")
+                ActionRow(text = "Artists", onClick = { navigateTo({ ArtistListScreen(it) }) })
+
+                SectionLabel("Account")
+                ActionRow(text = "Logout", onClick = { confirmLogout = true })
+
+                LightText(
+                    text = "Tide · Unofficial TIDAL client · User ${Tidal.userId}",
+                    variant = LightTextVariant.Superfine,
+                    lighten = true,
+                    modifier = Modifier.padding(top = 2f.gridUnitsAsDp()),
+                )
+                Spacer(modifier = Modifier.height(2.5f.gridUnitsAsDp()))
+            }
+        }
+    }
+
+    /** Full-screen confirm, Phono-style: title, message, confirm/cancel rows. */
+    @Composable
+    private fun ColumnScope.ConfirmContent(
+        title: String,
+        message: String,
+        confirmText: String,
+        onConfirm: () -> Unit,
+        onCancel: () -> Unit,
+    ) {
+        TabHeader(title)
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 1f.gridUnitsAsDp()),
         ) {
-            Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
-            TextButton(text = "Artists", onClick = { navigateTo({ ArtistListScreen(it) }) })
-            TextButton(
-                text = "Quality: " + when (quality) {
-                    "LOW" -> "Low"
-                    "LOSSLESS" -> "Lossless"
-                    else -> "High"
-                },
-                onClick = viewModel::cycleQuality,
-            )
-            TextButton(
-                text = "Theme: " +
-                    if (themeColors == LightThemeColors.Dark) "Dark" else "Light",
-                onClick = { LightThemeController.toggle() },
-            )
-            TextButton(text = "Logout", onClick = viewModel::signOut)
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(1.5f.gridUnitsAsDp()))
             LightText(
-                text = "Tide · An unofficial TIDAL client · User ${Tidal.userId}",
-                variant = LightTextVariant.Superfine,
+                text = message,
+                variant = LightTextVariant.Paragraph,
                 lighten = true,
-                modifier = Modifier.padding(bottom = 0.5f.gridUnitsAsDp()),
             )
+            Spacer(modifier = Modifier.height(1.5f.gridUnitsAsDp()))
+            ActionRow(text = confirmText, onClick = onConfirm)
+            ActionRow(text = "Cancel", onClick = onCancel)
         }
     }
 }

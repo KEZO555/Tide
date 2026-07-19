@@ -1,8 +1,6 @@
 package com.kezo.tide.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,17 +20,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.kezo.tide.api.Track
 import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIconConfiguration
+import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTheme
@@ -216,64 +212,55 @@ fun SectionHeader(text: String) {
     )
 }
 
-/**
- * Playback progress: a thin full-width line with a thicker filled portion,
- * both in the content color. Tap to seek when [onSeekFraction] is set.
- */
+// ---------- settings primitives (LightOS settings-tool patterns) ----------
+
+/** Section label above a settings group. */
 @Composable
-fun SolidProgress(
-    fraction: Float,
-    modifier: Modifier = Modifier,
-    onSeekFraction: ((Float) -> Unit)? = null,
-) {
-    val color = LightThemeTokens.colors.content
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(1f.gridUnitsAsDp())
-            .then(
-                if (onSeekFraction != null) {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            onSeekFraction(offset.x / size.width.toFloat())
-                        }
-                    }
-                } else {
-                    Modifier
-                }
-            ),
-    ) {
-        val thin = size.height * 0.10f
-        val thick = size.height * 0.28f
-        val cy = size.height / 2f
-        drawRect(
-            color = color,
-            topLeft = Offset(0f, cy - thin / 2f),
-            size = Size(size.width, thin),
-        )
-        val filled = size.width * fraction.coerceIn(0f, 1f)
-        if (filled > 0f) {
-            drawRect(
-                color = color,
-                topLeft = Offset(0f, cy - thick / 2f),
-                size = Size(filled, thick),
-            )
-        }
-    }
+fun SectionLabel(text: String) {
+    LightText(
+        text = text,
+        variant = LightTextVariant.Detail,
+        lighten = true,
+        modifier = Modifier.padding(
+            top = 1.5f.gridUnitsAsDp(),
+            bottom = 0.5f.gridUnitsAsDp(),
+        ),
+    )
 }
 
+/** Plain tappable settings row; [selected] underlines the label (radio-style). */
 @Composable
-fun TimeRow(positionMs: Int, durationMs: Int, modifier: Modifier = Modifier) {
+fun ActionRow(text: String, selected: Boolean = false, onClick: () -> Unit) {
+    LightText(
+        text = text,
+        variant = LightTextVariant.Copy,
+        underline = selected,
+        modifier = Modifier
+            .fillMaxWidth()
+            .lightClickable(onClick = onClick)
+            .padding(vertical = 0.5f.gridUnitsAsDp()),
+    )
+}
+
+/** LightOS toggle row: switch glyph on the left, label beside it. */
+@Composable
+fun ToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .lightClickable { onToggle(!checked) }
+            .padding(vertical = 0.5f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LightText(text = formatTime(positionMs), variant = LightTextVariant.Superfine)
-        Spacer(modifier = Modifier.weight(1f))
+        LightIcon(
+            // LightIcons names are inverted vs the artwork (knob-left is labeled ON).
+            icon = if (checked) LightIcons.TOGGLE_OFF else LightIcons.TOGGLE_ON,
+            modifier = Modifier.padding(end = 0.65f.gridUnitsAsDp()),
+        )
         LightText(
-            text = formatTime(durationMs),
-            variant = LightTextVariant.Superfine,
-            align = TextAlign.End,
+            text = label,
+            variant = LightTextVariant.Copy,
+            modifier = Modifier.weight(1f),
         )
     }
 }

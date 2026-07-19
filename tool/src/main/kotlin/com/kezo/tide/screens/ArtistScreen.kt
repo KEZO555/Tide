@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
-import com.kezo.tide.ui.TextButton
+import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.TideScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
@@ -83,17 +83,17 @@ class ArtistScreen(
             )
             Column(modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp())) {
                 Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
-                TextButton(text = "Top Tracks", onClick = {
+                ActionRow(text = "Top Tracks", onClick = {
                     navigateTo({
                         TrackListScreen(it, artist.name) { Tidal.artistTopTracks(artist.id) }
                     })
                 })
-                TextButton(text = "Albums", onClick = {
+                ActionRow(text = "Albums", onClick = {
                     navigateTo({
                         AlbumListScreen(it, artist.name) { Tidal.artistAlbums(artist.id) }
                     })
                 })
-                TextButton(
+                ActionRow(
                     text = when (favorite) {
                         true -> "Unfavorite"
                         false -> "Favorite"
