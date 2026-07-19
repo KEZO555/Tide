@@ -252,6 +252,20 @@ fun SectionHeader(text: String) {
     )
 }
 
+/** Large section headline for the Home page. */
+@Composable
+fun HomeSectionHeader(text: String) {
+    LightText(
+        text = text,
+        variant = LightTextVariant.Heading,
+        modifier = Modifier.padding(
+            start = 1f.gridUnitsAsDp(),
+            top = 1.5f.gridUnitsAsDp(),
+            bottom = 0.4f.gridUnitsAsDp(),
+        ),
+    )
+}
+
 // ---------- settings primitives (LightOS settings-tool patterns) ----------
 
 /** Section label above a settings group. */

@@ -41,6 +41,7 @@ import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
+import com.kezo.tide.ui.HomeSectionHeader
 import com.kezo.tide.ui.LoadingText
 import com.kezo.tide.ui.MediaRow
 import com.kezo.tide.ui.NumberedTrackRow
@@ -470,7 +471,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun HomeRecents() {
         val recents by Recents.tracks.collectAsState()
         val current by TidePlayer.current.collectAsState()
-        SectionHeader("Recently Played")
+        HomeSectionHeader("Recently Played")
         if (recents.isEmpty()) {
             LightText(
                 text = "Play something and it will show up here.",
@@ -506,7 +507,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun HomeArtists() {
         val artists by viewModel.homeArtists.collectAsState()
-        SectionHeader("Artists")
+        HomeSectionHeader("Artists")
         when (val s = artists) {
             is UiState.Loading -> LoadingText()
             is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadHomeArtists)
@@ -535,7 +536,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val s = mixes
         // mixes come from a best-effort endpoint; hide the section when empty
         if (s is UiState.Data && s.value.isEmpty()) return
-        SectionHeader("My Mixes")
+        HomeSectionHeader("My Mixes")
         when (s) {
             is UiState.Loading -> LoadingText()
             is UiState.Failed -> Unit
@@ -563,7 +564,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val releases by viewModel.homeReleases.collectAsState()
         val s = releases
         if (s is UiState.Data && s.value.isEmpty()) return
-        SectionHeader("New Releases")
+        HomeSectionHeader("New Releases")
         when (s) {
             is UiState.Loading -> LoadingText()
             is UiState.Failed -> Unit

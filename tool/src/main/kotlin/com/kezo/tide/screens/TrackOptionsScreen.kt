@@ -51,13 +51,13 @@ class TrackOptionsScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 1f.gridUnitsAsDp()),
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = Alignment.Start,
             ) {
                 Spacer(modifier = Modifier.height(2f.gridUnitsAsDp()))
                 LightText(
                     text = track.title,
                     variant = LightTextVariant.Subheading,
-                    align = TextAlign.End,
+                    align = TextAlign.Start,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
@@ -66,7 +66,7 @@ class TrackOptionsScreen(
                     text = track.artist,
                     variant = LightTextVariant.Detail,
                     lighten = true,
-                    align = TextAlign.End,
+                    align = TextAlign.Start,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
@@ -118,13 +118,13 @@ class TrackOptionsScreen(
         }
     }
 
-    /** LightOS context-menu option: large, right-aligned, roomy. */
+    /** LightOS context-menu option: large, left-aligned, roomy. */
     @Composable
     private fun MenuOption(label: String, onClick: () -> Unit) {
         LightText(
             text = label,
             variant = LightTextVariant.Heading,
-            align = TextAlign.End,
+            align = TextAlign.Start,
             modifier = Modifier
                 .fillMaxWidth()
                 .lightClickable(onClick = onClick)
