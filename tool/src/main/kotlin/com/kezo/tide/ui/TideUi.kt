@@ -158,7 +158,11 @@ fun NumberedTrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
             LightText(
-                text = listOf(track.artist, formatTime(track.durationSec * 1000))
+                text = listOf(
+                    track.artist,
+                    formatTime(track.durationSec * 1000),
+                    if (track.explicit) "E" else "",
+                )
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
                 variant = LightTextVariant.Detail,

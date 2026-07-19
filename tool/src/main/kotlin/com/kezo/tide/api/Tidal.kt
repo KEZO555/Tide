@@ -54,9 +54,12 @@ data class Album(
     val artist: String,
     val numberOfTracks: Int,
     val year: String,
+    val releaseDate: String = "",
 )
 
 data class Artist(val id: Long, val name: String)
+
+data class Mix(val id: String, val title: String, val subtitle: String)
 
 data class Playlist(
     val uuid: String,
@@ -162,6 +165,10 @@ object Tidal {
         albumTracksCache.clear()
         artistTopTracksCache.clear()
         artistAlbumsCache.clear()
+        mixTracksCache.clear()
+        similarArtistsCache.clear()
+        mixesCache = null
+        newReleasesCache = null
         store?.edit { it.clear() }
     }
 
@@ -345,6 +352,7 @@ object Tidal {
                 ?: (a.arr("artists").firstOrNull() as? JsonObject)?.str("name") ?: "",
             numberOfTracks = a.int("numberOfTracks") ?: 0,
             year = (a.str("releaseDate") ?: "").take(4),
+            releaseDate = a.str("releaseDate") ?: "",
         )
     }
 
@@ -417,6 +425,88 @@ object Tidal {
             artists = items("artists").mapNotNull(::parseArtist),
             playlists = items("playlists").mapNotNull(::parsePlaylist),
         )
+    }
+
+    // ---------- discovery ----------
+
+    private val mixTracksCache = ConcurrentHashMap<String, List<Track>>()
+    private val similarArtistsCache = ConcurrentHashMap<Long, List<Artist>>()
+    @Volatile
+    private var mixesCache: List<Mix>? = null
+    @Volatile
+    private var newReleasesCache: List<Album>? = null
+
+    /**
+     * The user's personalized mixes (Daily Discovery, My Mix 1..n) via the
+     * pages API. Best-effort: any parsing surprise returns an empty list.
+     */
+    suspend fun myMixes(): List<Mix> {
+        mixesCache?.let { return it }
+        return try {
+            val page = apiObject("pages/my_collection_my_mixes", mapOf("deviceType" to "BROWSER"))
+            val out = ArrayList<Mix>()
+            page.arr("rows").forEach { row ->
+                (row as? JsonObject)?.arr("modules")?.forEach { module ->
+                    (module as? JsonObject)?.obj("pagedList")?.arr("items")?.forEach { item ->
+                        (item as? JsonObject)?.let { o ->
+                            val id = o.str("id")
+                            val title = o.str("title")
+                            if (id != null && title != null) {
+                                out.add(Mix(id, title, o.str("subTitle") ?: ""))
+                            }
+                        }
+                    }
+                }
+            }
+            out.also { mixesCache = it }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun mixTracks(mixId: String): List<Track> =
+        mixTracksCache[mixId] ?: paged("mixes/$mixId/items")
+            .mapNotNull(::parseTrack)
+            .also { mixTracksCache[mixId] = it }
+
+    /** Tracks similar to the given one (TIDAL track radio). */
+    suspend fun trackRadio(trackId: Long): List<Track> =
+        paged("tracks/$trackId/radio", cap = 100).mapNotNull(::parseTrack)
+
+    suspend fun similarArtists(artistId: Long): List<Artist> =
+        similarArtistsCache[artistId] ?: try {
+            paged("artists/$artistId/similar", cap = 50)
+                .mapNotNull(::parseArtist)
+                .also { similarArtistsCache[artistId] = it }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+    /**
+     * Albums released in the last ~90 days by the user's favorite artists.
+     * Fans out over the (cached) discographies of up to 30 artists.
+     */
+    suspend fun newReleases(): List<Album> {
+        newReleasesCache?.let { return it }
+        val cutoff = java.time.LocalDate.now().minusDays(90).toString()
+        val artists = favoriteArtists().take(30)
+        val albums = coroutineScope {
+            artists.map { artist ->
+                async {
+                    try {
+                        artistAlbums(artist.id)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+            }.awaitAll()
+        }
+        return albums.flatten()
+            .filter { it.releaseDate >= cutoff }
+            .distinctBy { it.id }
+            .sortedByDescending { it.releaseDate }
+            .take(20)
+            .also { newReleasesCache = it }
     }
 
     // ---------- favorites (write) ----------

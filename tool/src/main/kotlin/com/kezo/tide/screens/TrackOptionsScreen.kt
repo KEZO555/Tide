@@ -96,6 +96,11 @@ class TrackOptionsScreen(
                         navigateTo({ ArtistScreen(it, Artist(track.artistId, track.artist)) })
                     }
                 }
+                MenuOption("Track Radio") {
+                    navigateTo({
+                        TrackListScreen(it, "Radio") { Tidal.trackRadio(track.id) }
+                    })
+                }
 
                 Box(modifier = Modifier.weight(1f))
             }

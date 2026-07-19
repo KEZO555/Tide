@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.viewModelScope
+import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.AuthPendingException
 import com.kezo.tide.api.SearchResults
 import com.kezo.tide.api.Tidal
@@ -80,6 +81,24 @@ private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
 
 enum class MainTab { Home, Liked, Albums, Playlists, Search, Settings }
 
+fun tabForId(id: String): MainTab = when (id) {
+    "liked" -> MainTab.Liked
+    "albums" -> MainTab.Albums
+    "playlists" -> MainTab.Playlists
+    "search" -> MainTab.Search
+    "settings" -> MainTab.Settings
+    else -> MainTab.Home
+}
+
+fun tabIcon(id: String): TabIcon = when (id) {
+    "liked" -> TabIcon.Vector(Icons.Filled.Favorite)
+    "albums" -> TabIcon.Vector(Icons.Filled.Album)
+    "playlists" -> TabIcon.Light(LightIcons.LIST)
+    "search" -> TabIcon.Vector(Icons.Filled.Search)
+    "settings" -> TabIcon.Vector(Icons.Filled.MoreHoriz)
+    else -> TabIcon.Vector(Icons.Filled.Home)
+}
+
 class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() {
 
     sealed interface Session {
@@ -110,12 +129,15 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     val quality = MutableStateFlow("HIGH")
 
     val homeArtists = MutableStateFlow<UiState<List<com.kezo.tide.api.Artist>>>(UiState.Loading)
+    val homeMixes = MutableStateFlow<UiState<List<com.kezo.tide.api.Mix>>>(UiState.Loading)
+    val homeReleases = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
 
     private val loadedTabs = HashSet<MainTab>()
 
     init {
         Tidal.init(dataStore)
         Recents.init(dataStore)
+        TidePrefs.init(dataStore)
         viewModelScope.launch {
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
@@ -152,6 +174,18 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
                 UiState.Data(Tidal.favoriteArtists())
             } catch (e: Exception) {
                 UiState.Failed(e.message ?: "Something went wrong")
+            }
+        }
+        homeMixes.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            homeMixes.value = UiState.Data(Tidal.myMixes())
+        }
+        homeReleases.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            homeReleases.value = try {
+                UiState.Data(Tidal.newReleases())
+            } catch (_: Exception) {
+                UiState.Data(emptyList())
             }
         }
     }
@@ -261,14 +295,18 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
         }
     }
 
+    fun firstEnabledTab(): MainTab =
+        TidePrefs.navTabs.value.firstOrNull { it.enabled }?.let { tabForId(it.id) } ?: MainTab.Home
+
     override fun onBackPressed(): Boolean {
         if (session.value !is Session.Ready) return false
         if (tab.value == MainTab.Search && searchMode.value !is SearchMode.Input) {
             newSearch()
             return true
         }
-        if (tab.value != MainTab.Home) {
-            tab.value = MainTab.Home
+        val homeTab = firstEnabledTab()
+        if (tab.value != homeTab) {
+            tab.value = homeTab
             return true
         }
         return false
@@ -367,6 +405,15 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.ReadyContent() {
         val tab by viewModel.tab.collectAsState()
+        val navPrefs by TidePrefs.navTabs.collectAsState()
+        val enabled = navPrefs.filter { it.enabled }
+
+        // if the current tab was hidden from settings, hop to the first shown one
+        LaunchedEffect(enabled, tab) {
+            if (enabled.none { tabForId(it.id) == tab }) {
+                viewModel.selectTab(viewModel.firstEnabledTab())
+            }
+        }
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
@@ -380,15 +427,8 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         }
 
         TabBar(
-            tabs = listOf(
-                TabIcon.Vector(Icons.Filled.Home) to (tab == MainTab.Home),
-                TabIcon.Vector(Icons.Filled.Favorite) to (tab == MainTab.Liked),
-                TabIcon.Vector(Icons.Filled.Album) to (tab == MainTab.Albums),
-                TabIcon.Light(LightIcons.LIST) to (tab == MainTab.Playlists),
-                TabIcon.Vector(Icons.Filled.Search) to (tab == MainTab.Search),
-                TabIcon.Vector(Icons.Filled.MoreHoriz) to (tab == MainTab.Settings),
-            ),
-            onSelect = { i -> viewModel.selectTab(MainTab.entries[i]) },
+            tabs = enabled.map { pref -> tabIcon(pref.id) to (tabForId(pref.id) == tab) },
+            onSelect = { i -> viewModel.selectTab(tabForId(enabled[i].id)) },
         )
     }
 
@@ -410,55 +450,126 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
     @Composable
     private fun ColumnScope.HomeTab() {
-        val recents by Recents.tracks.collectAsState()
-        val artists by viewModel.homeArtists.collectAsState()
-        val current by TidePlayer.current.collectAsState()
+        val sections by TidePrefs.homeSections.collectAsState()
         TabHeader("Home")
         LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            SectionHeader("Recently Played")
-            if (recents.isEmpty()) {
-                LightText(
-                    text = "Play something and it will show up here.",
-                    variant = LightTextVariant.Fine,
-                    lighten = true,
-                    modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+            sections.filter { it.enabled }.forEach { pref ->
+                when (pref.id) {
+                    "recents" -> HomeRecents()
+                    "artists" -> HomeArtists()
+                    "mixes" -> HomeMixes()
+                    "releases" -> HomeReleases()
+                }
+            }
+            Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
+        }
+    }
+
+    @Composable
+    private fun HomeRecents() {
+        val recents by Recents.tracks.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        SectionHeader("Recently Played")
+        if (recents.isEmpty()) {
+            LightText(
+                text = "Play something and it will show up here.",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+            )
+        } else {
+            recents.take(5).forEachIndexed { i, track ->
+                NumberedTrackRow(
+                    number = null,
+                    track = track,
+                    active = current?.id == track.id,
+                    onClick = {
+                        TidePlayer.play(recents, i)
+                        navigateTo({ PlayerScreen(it) })
+                    },
+                    onLongClick = {
+                        navigateTo({ TrackOptionsScreen(it, track) })
+                    },
                 )
-            } else {
-                recents.take(5).forEachIndexed { i, track ->
-                    NumberedTrackRow(
-                        number = null,
-                        track = track,
-                        active = current?.id == track.id,
+            }
+        }
+    }
+
+    @Composable
+    private fun HomeArtists() {
+        val artists by viewModel.homeArtists.collectAsState()
+        SectionHeader("Artists")
+        when (val s = artists) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadHomeArtists)
+            is UiState.Data -> {
+                if (s.value.isEmpty()) {
+                    EmptyText("Favorite an artist and it will show up here.")
+                } else {
+                    s.value.forEach { artist ->
+                        MediaRow(
+                            primary = artist.name,
+                            secondary = "",
+                            onClick = { navigateTo({ ArtistScreen(it, artist) }) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun HomeMixes() {
+        val mixes by viewModel.homeMixes.collectAsState()
+        val s = mixes
+        // mixes come from a best-effort endpoint; hide the section when empty
+        if (s is UiState.Data && s.value.isEmpty()) return
+        SectionHeader("My Mixes")
+        when (s) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> Unit
+            is UiState.Data -> {
+                s.value.forEach { mix ->
+                    MediaRow(
+                        primary = mix.title,
+                        secondary = mix.subtitle,
                         onClick = {
-                            TidePlayer.play(recents, i)
-                            navigateTo({ PlayerScreen(it) })
-                        },
-                        onLongClick = {
-                            navigateTo({ TrackOptionsScreen(it, track) })
+                            navigateTo({
+                                TrackListScreen(it, mix.title) { Tidal.mixTracks(mix.id) }
+                            })
                         },
                     )
                 }
             }
+        }
+    }
 
-            SectionHeader("Artists")
-            when (val s = artists) {
-                is UiState.Loading -> LoadingText()
-                is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadHomeArtists)
-                is UiState.Data -> {
-                    if (s.value.isEmpty()) {
-                        EmptyText("Favorite an artist and it will show up here.")
-                    } else {
-                        s.value.forEach { artist ->
-                            MediaRow(
-                                primary = artist.name,
-                                secondary = "",
-                                onClick = { navigateTo({ ArtistScreen(it, artist) }) },
-                            )
-                        }
-                    }
+    @Composable
+    private fun HomeReleases() {
+        val releases by viewModel.homeReleases.collectAsState()
+        val s = releases
+        if (s is UiState.Data && s.value.isEmpty()) return
+        SectionHeader("New Releases")
+        when (s) {
+            is UiState.Loading -> LoadingText()
+            is UiState.Failed -> Unit
+            is UiState.Data -> {
+                s.value.forEach { album ->
+                    MediaRow(
+                        primary = album.title,
+                        secondary = listOf(album.artist, album.year)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(it, album.title, numbered = true) {
+                                    Tidal.albumTracks(album.id)
+                                }
+                            })
+                        },
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
         }
     }
 
@@ -782,6 +893,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
                 SectionLabel("Library")
                 ActionRow(text = "Artists", onClick = { navigateTo({ ArtistListScreen(it) }) })
+
+                SectionLabel("Customize")
+                ActionRow(text = "Home Sections", onClick = { navigateTo({ HomeSectionsScreen(it) }) })
+                ActionRow(text = "Navigation Bar", onClick = { navigateTo({ NavBarScreen(it) }) })
 
                 SectionLabel("Account")
                 ActionRow(text = "Logout", onClick = { confirmLogout = true })

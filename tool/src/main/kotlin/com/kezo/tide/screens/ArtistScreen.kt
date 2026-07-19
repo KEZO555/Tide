@@ -39,6 +39,7 @@ private const val TOP_SONGS_SHOWN = 5
 class ArtistViewModel(private val artist: Artist) : LightViewModel<Unit>() {
     val topTracks = MutableStateFlow<UiState<List<Track>>>(UiState.Loading)
     val albums = MutableStateFlow<UiState<List<Album>>>(UiState.Loading)
+    val similar = MutableStateFlow<List<Artist>>(emptyList())
 
     /** null = unknown, true/false = favorite state */
     val favorite = MutableStateFlow<Boolean?>(null)
@@ -70,6 +71,9 @@ class ArtistViewModel(private val artist: Artist) : LightViewModel<Unit>() {
             } catch (e: Exception) {
                 UiState.Failed(e.message ?: "Something went wrong")
             }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            similar.value = Tidal.similarArtists(artist.id).take(8)
         }
     }
 
@@ -163,6 +167,17 @@ class ArtistScreen(
                                 },
                             )
                         }
+                    }
+                }
+                val similarArtists by viewModel.similar.collectAsState()
+                if (similarArtists.isNotEmpty()) {
+                    SectionHeader("Similar Artists")
+                    similarArtists.forEach { other ->
+                        MediaRow(
+                            primary = other.name,
+                            secondary = "",
+                            onClick = { navigateTo({ ArtistScreen(it, other) }) },
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
