@@ -44,7 +44,7 @@ import com.thelightphone.sdk.ui.lightClickable
  * Height (in LightOS grid units) of every uniform list row in the tool.
  * Phono's library rows: large title + lighter secondary line, roomy spacing.
  */
-const val ROW_UNITS = 3.2f
+const val ROW_UNITS = 3.8f
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
@@ -132,17 +132,17 @@ fun NumberedTrackRow(
     ) {
         LightText(
             text = "$number.",
-            variant = LightTextVariant.Superfine,
+            variant = LightTextVariant.Detail,
             lighten = !active,
             align = TextAlign.Center,
             maxLines = 1,
-            modifier = Modifier.width(2f.gridUnitsAsDp()),
+            modifier = Modifier.width(2.2f.gridUnitsAsDp()),
         )
         Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
         Column(modifier = Modifier.fillMaxWidth()) {
             LightText(
                 text = track.title,
-                variant = LightTextVariant.Fine,
+                variant = LightTextVariant.Subheading,
                 underline = active,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -151,7 +151,7 @@ fun NumberedTrackRow(
                 text = listOf(track.artist, formatTime(track.durationSec * 1000))
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
-                variant = LightTextVariant.Superfine,
+                variant = LightTextVariant.Detail,
                 lighten = true,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -177,14 +177,14 @@ fun MediaRow(
     ) {
         LightText(
             text = primary,
-            variant = LightTextVariant.Fine,
+            variant = LightTextVariant.Subheading,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (secondary.isNotBlank()) {
             LightText(
                 text = secondary,
-                variant = LightTextVariant.Superfine,
+                variant = LightTextVariant.Detail,
                 lighten = true,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -198,7 +198,7 @@ fun MediaRow(
 fun TextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     LightText(
         text = text,
-        variant = LightTextVariant.Fine,
+        variant = LightTextVariant.Copy,
         underline = true,
         modifier = modifier
             .fillMaxWidth()
@@ -242,7 +242,7 @@ fun SectionLabel(text: String) {
 fun ActionRow(text: String, selected: Boolean = false, onClick: () -> Unit) {
     LightText(
         text = text,
-        variant = LightTextVariant.Fine,
+        variant = LightTextVariant.Copy,
         underline = selected,
         modifier = Modifier
             .fillMaxWidth()
@@ -268,7 +268,7 @@ fun ToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
         )
         LightText(
             text = label,
-            variant = LightTextVariant.Fine,
+            variant = LightTextVariant.Copy,
             modifier = Modifier.weight(1f),
         )
     }

@@ -66,6 +66,7 @@ import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.designVerticalPxToDp
+import com.thelightphone.sdk.ui.designVerticalPxToSp
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -503,7 +504,13 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             BasicTextField(
                 value = query,
                 onValueChange = { query = it },
-                textStyle = LightThemeTokens.typography.heading.copy(color = colors.content),
+                // LightTextField value size (Copy), scaled for screen height the
+                // same way LightText scales its variants
+                textStyle = LightThemeTokens.typography.copy.copy(
+                    color = colors.content,
+                    fontSize = 30f.designVerticalPxToSp(),
+                    lineHeight = 45f.designVerticalPxToSp(),
+                ),
                 singleLine = true,
                 cursorBrush = SolidColor(colors.content),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
