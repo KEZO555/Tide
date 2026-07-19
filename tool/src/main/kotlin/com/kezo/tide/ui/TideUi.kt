@@ -46,6 +46,14 @@ import com.thelightphone.sdk.ui.lightClickable
  */
 const val ROW_UNITS = 3.8f
 
+/**
+ * Tracks whether a PlayerScreen is somewhere in the navigation stack, so
+ * headers can pop back toward it instead of stacking endless copies.
+ */
+object PlayerPresence {
+    var openCount: Int = 0
+}
+
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
     data class Data<T>(val value: T) : UiState<T>

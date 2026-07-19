@@ -6,7 +6,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
-import com.kezo.tide.api.Album
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
@@ -16,6 +15,7 @@ import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
 import com.kezo.tide.ui.MediaRow
 import com.kezo.tide.ui.NumberedTrackRow
+import com.kezo.tide.ui.PlayerPresence
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.TideScreen
 import com.kezo.tide.ui.UiState
@@ -76,7 +76,10 @@ class TrackListScreen(
                 center = LightTopBarCenter.Text(title),
                 rightButton = LightBarButton.LightIcon(
                     LightIcons.AUDIO_MESSAGE,
-                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                    onClick = {
+                        if (PlayerPresence.openCount > 0) goBack()
+                        else navigateTo({ a -> PlayerScreen(a) })
+                    },
                 ),
             )
             when (val s = state) {
@@ -113,66 +116,6 @@ class TrackListScreen(
     }
 }
 
-/** An artist's discography. */
-class AlbumListScreen(
-    sealedActivity: SealedLightActivity,
-    private val title: String,
-    private val loader: suspend () -> List<Album>,
-) : LightScreen<Unit, ListViewModel<Album>>(sealedActivity) {
-
-    @Suppress("UNCHECKED_CAST")
-    override val viewModelClass: Class<ListViewModel<Album>>
-        get() = ListViewModel::class.java as Class<ListViewModel<Album>>
-
-    override fun createViewModel() = ListViewModel(loader)
-
-    @Composable
-    override fun Content() {
-        val state by viewModel.state.collectAsState()
-        TideScreen {
-            LightTopBar(
-                leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                center = LightTopBarCenter.Text(title),
-                rightButton = LightBarButton.LightIcon(
-                    LightIcons.AUDIO_MESSAGE,
-                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
-                ),
-            )
-            when (val s = state) {
-                is UiState.Loading -> LoadingText()
-                is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::load)
-                is UiState.Data -> {
-                    if (s.value.isEmpty()) {
-                        EmptyText("Nothing here yet")
-                    } else {
-                        LightLazyScrollView(
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            uniformItemHeightGridUnits = ROW_UNITS,
-                        ) {
-                            items(s.value.size) { i ->
-                                val album = s.value[i]
-                                MediaRow(
-                                    primary = album.title,
-                                    secondary = listOf(album.artist, album.year)
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(" · "),
-                                    onClick = {
-                                        navigateTo({
-                                            TrackListScreen(it, album.title, numbered = true) {
-                                                Tidal.albumTracks(album.id)
-                                            }
-                                        })
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** The user's favorite artists (reached from Settings, echo-style). */
 class ArtistListScreen(
     sealedActivity: SealedLightActivity,
@@ -193,7 +136,10 @@ class ArtistListScreen(
                 center = LightTopBarCenter.Text("Artists"),
                 rightButton = LightBarButton.LightIcon(
                     LightIcons.AUDIO_MESSAGE,
-                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                    onClick = {
+                        if (PlayerPresence.openCount > 0) goBack()
+                        else navigateTo({ a -> PlayerScreen(a) })
+                    },
                 ),
             )
             when (val s = state) {

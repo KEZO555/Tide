@@ -43,6 +43,7 @@ import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
 import com.kezo.tide.ui.MediaRow
 import com.kezo.tide.ui.NumberedTrackRow
+import com.kezo.tide.ui.PlayerPresence
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.SectionHeader
 import com.kezo.tide.ui.SectionLabel
@@ -383,7 +384,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             center = LightTopBarCenter.Text(title),
             rightButton = LightBarButton.LightIcon(
                 LightIcons.AUDIO_MESSAGE,
-                onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                onClick = {
+                    if (PlayerPresence.openCount > 0) goBack()
+                    else navigateTo({ a -> PlayerScreen(a) })
+                },
             ),
         )
     }
@@ -392,7 +396,8 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun ColumnScope.HomeTab() {
         val recents by Recents.tracks.collectAsState()
         val current by TidePlayer.current.collectAsState()
-        TabHeader("Tide")
+        // Echo's home: a titled full-height list, nothing else
+        TabHeader("Recently Played")
         if (recents.isEmpty()) {
             LightText(
                 text = "Play something and it will show up here.",
@@ -401,7 +406,6 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
             )
         } else {
-            SectionHeader("Recently Played")
             LightLazyScrollView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 uniformItemHeightGridUnits = ROW_UNITS,

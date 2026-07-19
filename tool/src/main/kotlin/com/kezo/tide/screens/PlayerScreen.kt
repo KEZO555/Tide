@@ -16,17 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +43,7 @@ import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.NumberedTrackRow
+import com.kezo.tide.ui.PlayerPresence
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.TideScreen
 import com.kezo.tide.ui.formatTime
@@ -58,6 +52,7 @@ import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcon
+import com.thelightphone.sdk.ui.LightIconConfiguration
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightText
@@ -98,12 +93,20 @@ class PlayerViewModel : LightViewModel<Unit>() {
 }
 
 /**
- * Now Playing in the style of the LightOS music tool (as replicated by Phono):
- * centered artist / large title / duration, a scrubbable line, three transport
- * icons, and shuffle · save-circle · repeat pinned along the bottom.
+ * Now Playing in the style of the Light podcast/music tools: back-only header,
+ * centered artist / large title, a scrubbable line with elapsed/total time,
+ * LightOS transport glyphs, an Up Next hint, and utilities along the bottom.
  */
 class PlayerScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, PlayerViewModel>(sealedActivity) {
+
+    init {
+        PlayerPresence.openCount++
+    }
+
+    override fun onScreenDestroy() {
+        PlayerPresence.openCount--
+    }
 
     override val viewModelClass: Class<PlayerViewModel>
         get() = PlayerViewModel::class.java
@@ -121,6 +124,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val repeat by TidePlayer.repeat.collectAsState()
         val playbackError by TidePlayer.error.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
+        val queue by TidePlayer.queue.collectAsState()
+        val queueIndex by TidePlayer.index.collectAsState()
 
         LaunchedEffect(track?.id) {
             track?.id?.let(viewModel::refreshFavorite)
@@ -195,14 +200,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                         }
                                     ),
                             )
-                            LightText(
-                                text = formatTime(durationMs),
-                                variant = LightTextVariant.Detail,
-                                align = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 0.6f.gridUnitsAsDp()),
-                            )
                             val statusLine = when {
                                 isLoading -> "Loading..."
                                 playbackError != null -> playbackError
@@ -214,7 +211,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                     variant = LightTextVariant.Superfine,
                                     lighten = true,
                                     align = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 0.6f.gridUnitsAsDp()),
                                 )
                             }
                         } else {
@@ -235,25 +234,61 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
 
                     if (t != null) {
                         ScrubProgress(positionMs = positionMs, durationMs = durationMs)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth(0.9f)
+                                .padding(top = 0.3f.gridUnitsAsDp()),
+                        ) {
+                            LightText(
+                                text = formatTime(positionMs),
+                                variant = LightTextVariant.Detail,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            LightText(
+                                text = formatTime(durationMs),
+                                variant = LightTextVariant.Detail,
+                                align = TextAlign.End,
+                            )
+                        }
                         TransportControls(isPlaying = isPlaying)
                     }
                 }
 
                 if (t != null) {
-                    SecondaryControls(
-                        shuffleActive = shuffle,
-                        repeatMode = repeat,
-                        saved = favorite == true,
-                        saveEnabled = favorite != null,
-                        onSaveTap = { viewModel.toggleFavorite(t) },
-                        onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 1.3f.gridUnitsAsDp(),
-                                vertical = 1.3f.gridUnitsAsDp(),
-                            ),
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        val next = queue.getOrNull(queueIndex + 1)
+                        if (next != null) {
+                            LightText(
+                                text = "Up Next: ${next.title} · ${next.artist}",
+                                variant = LightTextVariant.Superfine,
+                                lighten = true,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                align = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .lightClickable { navigateTo({ a -> QueueScreen(a) }) }
+                                    .padding(bottom = 0.6f.gridUnitsAsDp()),
+                            )
+                        }
+                        SecondaryControls(
+                            shuffleActive = shuffle,
+                            repeatMode = repeat,
+                            saved = favorite == true,
+                            saveEnabled = favorite != null,
+                            onSaveTap = { viewModel.toggleFavorite(t) },
+                            onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 1.3f.gridUnitsAsDp(),
+                                    vertical = 1.3f.gridUnitsAsDp(),
+                                ),
+                        )
+                    }
                 } else {
                     Spacer(modifier = Modifier.height(3.2f.gridUnitsAsDp()))
                 }
@@ -261,7 +296,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /** Phono's ProgressBar: thin full line + thicker filled line, drag to scrub. */
+    /** Thin full line + thicker filled line, drag to scrub. */
     @Composable
     private fun ScrubProgress(positionMs: Int, durationMs: Int) {
         val colors = LightThemeTokens.colors
@@ -310,41 +345,29 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
+    /** LightOS transport glyphs: rewind · play/pause · fast-forward. */
     @Composable
     private fun TransportControls(isPlaying: Boolean) {
-        val colors = LightThemeTokens.colors
         Row(
             modifier = Modifier.padding(
-                top = 1.4f.gridUnitsAsDp(),
+                top = 1.2f.gridUnitsAsDp(),
                 bottom = 1.3f.gridUnitsAsDp(),
             ),
             horizontalArrangement = Arrangement.spacedBy(3.6f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.SkipPrevious,
-                contentDescription = "Previous",
-                tint = colors.content,
-                modifier = Modifier
-                    .size(2.2f.gridUnitsAsDp())
-                    .lightClickable { TidePlayer.previous() },
-            )
-            Icon(
-                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = "Play/Pause",
-                tint = colors.content,
-                modifier = Modifier
-                    .size(3.2f.gridUnitsAsDp())
-                    .lightClickable { TidePlayer.toggle() },
-            )
-            Icon(
-                imageVector = Icons.Filled.SkipNext,
-                contentDescription = "Next",
-                tint = colors.content,
-                modifier = Modifier
-                    .size(2.2f.gridUnitsAsDp())
-                    .lightClickable { TidePlayer.next() },
-            )
+            Box(modifier = Modifier.lightClickable { TidePlayer.previous() }) {
+                LightIcon(icon = LightIcons.REWIND, size = 2.2f)
+            }
+            Box(modifier = Modifier.lightClickable { TidePlayer.toggle() }) {
+                LightIcon(
+                    icon = if (isPlaying) LightIcons.PAUSE else LightIcons.PLAY,
+                    size = 3.2f,
+                )
+            }
+            Box(modifier = Modifier.lightClickable { TidePlayer.next() }) {
+                LightIcon(icon = LightIcons.FAST_FORWARD, size = 2.2f)
+            }
         }
     }
 
@@ -364,9 +387,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PlaybackModeIcon(
-                icon = Icons.Filled.Shuffle,
+                icon = LightIcons.SHUFFLE,
                 active = shuffleActive,
-                contentDescription = "Shuffle",
                 onClick = { TidePlayer.toggleShuffle() },
             )
             SaveControl(
@@ -375,9 +397,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 onClick = onSaveTap,
             )
             PlaybackModeIcon(
-                icon = if (repeatMode == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                icon = LightIcons.LOOP,
                 active = repeatMode != RepeatMode.OFF,
-                contentDescription = "Repeat",
+                badge = if (repeatMode == RepeatMode.ONE) "1" else null,
                 onClick = { TidePlayer.cycleRepeat() },
             )
             Box(modifier = Modifier.lightClickable(onClick = onOpenQueue)) {
@@ -386,7 +408,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /** Circle save control: outlined + for save, filled ✓ once liked. */
+    /** Circle save control: outlined + to like, filled ✓ once liked. */
     @Composable
     private fun SaveControl(saved: Boolean, enabled: Boolean, onClick: () -> Unit) {
         val colors = LightThemeTokens.colors
@@ -417,24 +439,25 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /** Small mode icon with the active-state underline dash beneath. */
+    /** LightOS mode glyph with the active-state underline dash beneath. */
     @Composable
     private fun PlaybackModeIcon(
-        icon: ImageVector,
+        icon: LightIconConfiguration,
         active: Boolean,
-        contentDescription: String,
         onClick: () -> Unit,
+        badge: String? = null,
     ) {
         val colors = LightThemeTokens.colors
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = colors.content,
-                modifier = Modifier
-                    .size(1.9f.gridUnitsAsDp())
-                    .lightClickable(onClick = onClick),
-            )
+        Column(
+            modifier = Modifier.lightClickable(onClick = onClick),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                LightIcon(icon = icon, size = 1.9f)
+                badge?.let {
+                    LightText(text = it, variant = LightTextVariant.Micro)
+                }
+            }
             Spacer(modifier = Modifier.height(0.25f.gridUnitsAsDp()))
             if (active) {
                 Box(
@@ -464,6 +487,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val queue by TidePlayer.queue.collectAsState()
         val index by TidePlayer.index.collectAsState()
+        val positionMs by TidePlayer.positionMs.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -473,14 +497,22 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
             if (queue.isEmpty()) {
                 EmptyText("Queue is empty")
             } else {
+                val remainingSec = queue.drop(index.coerceAtLeast(0)).sumOf { it.durationSec } -
+                    positionMs / 1000
                 LightText(
-                    text = "Hold a track to remove it",
+                    text = "${(index + 1).coerceAtLeast(1)} of ${queue.size} · " +
+                        "${(remainingSec / 60).coerceAtLeast(0)} min left · Hold to remove",
                     variant = LightTextVariant.Superfine,
                     lighten = true,
                     modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
                 )
+                // open with the playing track in view
+                val listState = rememberLazyListState(
+                    initialFirstVisibleItemIndex = (index - 1).coerceAtLeast(0),
+                )
                 LightLazyScrollView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    listState = listState,
                     uniformItemHeightGridUnits = ROW_UNITS,
                 ) {
                     items(queue.size) { i ->
