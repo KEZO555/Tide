@@ -17,6 +17,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -28,6 +31,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import java.io.IOException
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 // ---------- domain models ----------
 
@@ -35,6 +39,7 @@ data class Track(
     val id: Long,
     val title: String,
     val artist: String,
+    val artistId: Long,
     val albumTitle: String,
     val albumId: Long,
     val durationSec: Int,
@@ -153,6 +158,9 @@ object Tidal {
         userId = 0L
         favTrackIds.clear()
         favIdsLoaded = false
+        albumTracksCache.clear()
+        artistTopTracksCache.clear()
+        artistAlbumsCache.clear()
         store?.edit { it.clear() }
     }
 
@@ -283,23 +291,28 @@ object Tidal {
     private suspend fun apiObject(path: String, params: Map<String, String> = emptyMap()): JsonObject =
         json.parseToJsonElement(api(path, params)) as JsonObject
 
-    /** Pages through a list endpoint until exhausted (capped so huge libraries stay bounded). */
+    /**
+     * Pages through a list endpoint (capped so huge libraries stay bounded).
+     * The first page reveals the total; the remaining pages are fetched
+     * concurrently so long lists load in one round-trip's extra time.
+     */
     private suspend fun paged(
         path: String,
         extra: Map<String, String> = emptyMap(),
         cap: Int = 1000,
-    ): List<JsonObject> {
-        val out = ArrayList<JsonObject>()
+    ): List<JsonObject> = coroutineScope {
         val limit = 50
-        var offset = 0
-        while (out.size < cap) {
-            val page = apiObject(path, extra + mapOf("limit" to "$limit", "offset" to "$offset"))
-            val items = page.arr("items")
-            items.forEach { (it as? JsonObject)?.let(out::add) }
-            if (items.size < limit) break
-            offset += limit
-        }
-        return out
+        val first = apiObject(path, extra + mapOf("limit" to "$limit", "offset" to "0"))
+        val firstItems = first.arr("items").mapNotNull { it as? JsonObject }
+        val total = (first.int("totalNumberOfItems") ?: firstItems.size).coerceAtMost(cap)
+        if (firstItems.size >= total || firstItems.size < limit) return@coroutineScope firstItems
+        val rest = (limit until total step limit).map { offset ->
+            async {
+                apiObject(path, extra + mapOf("limit" to "$limit", "offset" to "$offset"))
+                    .arr("items").mapNotNull { it as? JsonObject }
+            }
+        }.awaitAll()
+        firstItems + rest.flatten()
     }
 
     // ---------- parsing ----------
@@ -312,6 +325,8 @@ object Tidal {
             title = t.str("title") ?: "unknown",
             artist = t.obj("artist")?.str("name")
                 ?: (t.arr("artists").firstOrNull() as? JsonObject)?.str("name") ?: "",
+            artistId = t.obj("artist")?.long("id")
+                ?: (t.arr("artists").firstOrNull() as? JsonObject)?.long("id") ?: 0L,
             albumTitle = album?.str("title") ?: "",
             albumId = album?.long("id") ?: 0L,
             durationSec = t.int("duration") ?: 0,
@@ -363,17 +378,27 @@ object Tidal {
     suspend fun playlists(): List<Playlist> =
         paged("users/$userId/playlistsAndFavoritePlaylists").mapNotNull(::parsePlaylist)
 
+    private val albumTracksCache = ConcurrentHashMap<Long, List<Track>>()
+    private val artistTopTracksCache = ConcurrentHashMap<Long, List<Track>>()
+    private val artistAlbumsCache = ConcurrentHashMap<Long, List<Album>>()
+
     suspend fun albumTracks(albumId: Long): List<Track> =
-        paged("albums/$albumId/tracks").mapNotNull(::parseTrack)
+        albumTracksCache[albumId] ?: paged("albums/$albumId/tracks")
+            .mapNotNull(::parseTrack)
+            .also { albumTracksCache[albumId] = it }
 
     suspend fun playlistTracks(uuid: String): List<Track> =
         paged("playlists/$uuid/tracks").mapNotNull(::parseTrack)
 
     suspend fun artistTopTracks(artistId: Long): List<Track> =
-        paged("artists/$artistId/toptracks", cap = 20).mapNotNull(::parseTrack)
+        artistTopTracksCache[artistId] ?: paged("artists/$artistId/toptracks", cap = 20)
+            .mapNotNull(::parseTrack)
+            .also { artistTopTracksCache[artistId] = it }
 
     suspend fun artistAlbums(artistId: Long): List<Album> =
-        paged("artists/$artistId/albums").mapNotNull(::parseAlbum)
+        artistAlbumsCache[artistId] ?: paged("artists/$artistId/albums")
+            .mapNotNull(::parseAlbum)
+            .also { artistAlbumsCache[artistId] = it }
 
     suspend fun search(query: String): SearchResults {
         val r = apiObject(

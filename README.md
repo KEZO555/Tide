@@ -34,8 +34,9 @@ seek line on the Now Playing screen. Light and dark themes included.
 - **Browse your library**: favorite tracks, albums, artists, and your playlists
   (own + followed).
 - **Artist pages**: top tracks and full discography.
-- **Playback**: play/pause, next/previous, tap-to-seek on the progress line, shuffle, repeat (off / all / one), and a live queue you can jump
-  around in.
+- **Playback**: play/pause, next/previous, drag-to-scrub, shuffle, repeat (off / all / one).
+- **Queue management**: long-press any track for Play Next / Add to Queue / Go to
+  Album / Go to Artist; in the queue, long-press removes a track, plus Clear Queue.
 - **Favorites management**: star/unstar tracks from the player, favorite/unfavorite
   artists.
 - **Quality selection**: 96 kbps AAC / 320 kbps AAC / FLAC lossless (hi-res tiers

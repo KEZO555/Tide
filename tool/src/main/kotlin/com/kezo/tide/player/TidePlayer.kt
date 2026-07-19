@@ -113,6 +113,45 @@ object TidePlayer {
         if (queueIndex in _queue.value.indices) startTrack(queueIndex)
     }
 
+    /** Appends a track to the end of the queue (starts playback when idle). */
+    fun addToQueue(track: Track) {
+        if (_queue.value.isEmpty()) {
+            play(listOf(track), 0)
+            return
+        }
+        _queue.value = _queue.value + track
+        originalQueue = originalQueue + track
+    }
+
+    /** Inserts a track right after the one currently playing. */
+    fun playNext(track: Track) {
+        if (_queue.value.isEmpty()) {
+            play(listOf(track), 0)
+            return
+        }
+        val q = _queue.value.toMutableList()
+        q.add((_index.value + 1).coerceIn(0, q.size), track)
+        _queue.value = q
+        originalQueue = originalQueue + track
+    }
+
+    /** Removes the entry at [queueIndex]; the playing entry can't be removed. */
+    fun removeFromQueue(queueIndex: Int) {
+        val q = _queue.value.toMutableList()
+        if (queueIndex !in q.indices || queueIndex == _index.value) return
+        q.removeAt(queueIndex)
+        _queue.value = q
+        if (queueIndex < _index.value) _index.value = _index.value - 1
+    }
+
+    /** Drops everything except the currently playing track. */
+    fun clearUpcoming() {
+        val cur = _current.value ?: return
+        _queue.value = listOf(cur)
+        originalQueue = listOf(cur)
+        _index.value = 0
+    }
+
     private fun startTrack(i: Int) {
         val track = _queue.value.getOrNull(i) ?: return
         val gen = ++generation

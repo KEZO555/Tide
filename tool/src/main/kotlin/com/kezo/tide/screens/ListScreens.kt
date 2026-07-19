@@ -99,6 +99,9 @@ class TrackListScreen(
                                         TidePlayer.play(s.value, i)
                                         navigateTo({ PlayerScreen(it) })
                                     },
+                                    onLongClick = {
+                                        navigateTo({ TrackOptionsScreen(it, track) })
+                                    },
                                 )
                             }
                         }

@@ -42,10 +42,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewModelScope
+import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.player.RepeatMode
 import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.ROW_UNITS
@@ -161,19 +163,46 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         if (t != null) {
                             LightText(
                                 text = t.artist,
-                                variant = LightTextVariant.Copy,
+                                variant = LightTextVariant.Fine,
+                                lighten = true,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (t.artistId != 0L) {
+                                            Modifier.lightClickable {
+                                                navigateTo({ a ->
+                                                    ArtistScreen(a, Artist(t.artistId, t.artist))
+                                                })
+                                            }
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
                             )
                             LightText(
                                 text = t.title,
-                                variant = LightTextVariant.Heading,
-                                maxLines = 1,
+                                variant = LightTextVariant.Subheading,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (t.albumId != 0L) {
+                                            Modifier.lightClickable {
+                                                navigateTo({ a ->
+                                                    TrackListScreen(a, t.albumTitle.ifBlank { "Album" }) {
+                                                        Tidal.albumTracks(t.albumId)
+                                                    }
+                                                })
+                                            }
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
                             )
                             LightText(
                                 text = formatTime(durationMs),
@@ -449,6 +478,12 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
             if (queue.isEmpty()) {
                 EmptyText("Queue is empty")
             } else {
+                LightText(
+                    text = "Hold a track to remove it",
+                    variant = LightTextVariant.Superfine,
+                    lighten = true,
+                    modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+                )
                 LightLazyScrollView(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     uniformItemHeightGridUnits = ROW_UNITS,
@@ -459,8 +494,12 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                             track = queue[i],
                             active = i == index,
                             onClick = { TidePlayer.jumpTo(i) },
+                            onLongClick = { TidePlayer.removeFromQueue(i) },
                         )
                     }
+                }
+                if (queue.size > 1) {
+                    ActionRow(text = "Clear Queue", onClick = { TidePlayer.clearUpcoming() })
                 }
             }
         }

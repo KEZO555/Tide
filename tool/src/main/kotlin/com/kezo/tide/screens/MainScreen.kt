@@ -396,13 +396,17 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         uniformItemHeightGridUnits = ROW_UNITS,
                     ) {
                         items(s.value.size) { i ->
+                            val track = s.value[i]
                             NumberedTrackRow(
                                 number = i + 1,
-                                track = s.value[i],
-                                active = current?.id == s.value[i].id,
+                                track = track,
+                                active = current?.id == track.id,
                                 onClick = {
                                     TidePlayer.play(s.value, i)
                                     navigateTo({ PlayerScreen(it) })
+                                },
+                                onLongClick = {
+                                    navigateTo({ TrackOptionsScreen(it, track) })
                                 },
                             )
                         }
@@ -582,6 +586,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         onClick = {
                             TidePlayer.play(results.tracks, i)
                             navigateTo({ PlayerScreen(it) })
+                        },
+                        onLongClick = {
+                            navigateTo({ TrackOptionsScreen(it, track) })
                         },
                     )
                 }
