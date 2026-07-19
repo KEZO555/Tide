@@ -1,8 +1,8 @@
 [tool]
 id = "com.kezo.tide"
 label = "Tide"
-versionCode = 13
-versionName = "1.12"
+versionCode = 14
+versionName = "1.13"
 permissions = ["android.permission.INTERNET"]
 # use "com.thelightphone.sdk.emulator" when running on the LightOS emulator
 serverPackage = "com.lightos"

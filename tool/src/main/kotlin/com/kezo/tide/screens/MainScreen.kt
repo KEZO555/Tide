@@ -48,6 +48,7 @@ import com.kezo.tide.ui.PlayerPresence
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.SectionHeader
 import com.kezo.tide.ui.SectionLabel
+import com.kezo.tide.ui.ShowAllRow
 import com.kezo.tide.ui.TabBar
 import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
@@ -492,6 +493,13 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     },
                 )
             }
+            if (recents.size > 5) {
+                ShowAllRow {
+                    navigateTo({
+                        TrackListScreen(it, "Recently Played") { Recents.tracks.value }
+                    })
+                }
+            }
         }
     }
 
@@ -506,12 +514,15 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("Favorite an artist and it will show up here.")
                 } else {
-                    s.value.forEach { artist ->
+                    s.value.take(5).forEach { artist ->
                         MediaRow(
                             primary = artist.name,
                             secondary = "",
                             onClick = { navigateTo({ ArtistScreen(it, artist) }) },
                         )
+                    }
+                    if (s.value.size > 5) {
+                        ShowAllRow { navigateTo({ ArtistListScreen(it) }) }
                     }
                 }
             }
@@ -529,7 +540,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             is UiState.Loading -> LoadingText()
             is UiState.Failed -> Unit
             is UiState.Data -> {
-                s.value.forEach { mix ->
+                s.value.take(4).forEach { mix ->
                     MediaRow(
                         primary = mix.title,
                         secondary = mix.subtitle,
@@ -539,6 +550,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                             })
                         },
                     )
+                }
+                if (s.value.size > 4) {
+                    ShowAllRow { navigateTo({ MixListScreen(it) }) }
                 }
             }
         }
@@ -554,7 +568,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             is UiState.Loading -> LoadingText()
             is UiState.Failed -> Unit
             is UiState.Data -> {
-                s.value.forEach { album ->
+                s.value.take(4).forEach { album ->
                     MediaRow(
                         primary = album.title,
                         secondary = listOf(album.artist, album.year)
@@ -562,12 +576,21 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                             .joinToString(" · "),
                         onClick = {
                             navigateTo({
-                                TrackListScreen(it, album.title, numbered = true) {
-                                    Tidal.albumTracks(album.id)
-                                }
+                                TrackListScreen(
+                                    it, album.title,
+                                    numbered = true,
+                                    albumId = album.id,
+                                ) { Tidal.albumTracks(album.id) }
                             })
                         },
                     )
+                }
+                if (s.value.size > 4) {
+                    ShowAllRow {
+                        navigateTo({
+                            AlbumListScreen(it, "New Releases") { Tidal.newReleases() }
+                        })
+                    }
                 }
             }
         }
@@ -634,9 +657,11 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                     .joinToString(" · "),
                                 onClick = {
                                     navigateTo({
-                                        TrackListScreen(it, album.title, numbered = true) {
-                                            Tidal.albumTracks(album.id)
-                                        }
+                                        TrackListScreen(
+                                            it, album.title,
+                                            numbered = true,
+                                            albumId = album.id,
+                                        ) { Tidal.albumTracks(album.id) }
                                     })
                                 },
                             )

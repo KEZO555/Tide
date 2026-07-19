@@ -160,9 +160,11 @@ class ArtistScreen(
                                 secondary = album.year,
                                 onClick = {
                                     navigateTo({
-                                        TrackListScreen(it, album.title, numbered = true) {
-                                            Tidal.albumTracks(album.id)
-                                        }
+                                        TrackListScreen(
+                                            it, album.title,
+                                            numbered = true,
+                                            albumId = album.id,
+                                        ) { Tidal.albumTracks(album.id) }
                                     })
                                 },
                             )

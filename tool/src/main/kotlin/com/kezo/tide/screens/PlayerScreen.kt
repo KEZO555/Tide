@@ -145,7 +145,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 rightButton = if (t != null) {
                     LightBarButton.LightIcon(
-                        if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER,
+                        if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER_ON,
                         onClick = { showVolume = !showVolume },
                     )
                 } else {
@@ -209,9 +209,11 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                         if (t.albumId != 0L) {
                                             Modifier.lightClickable {
                                                 navigateTo({ a ->
-                                                    TrackListScreen(a, t.albumTitle.ifBlank { "Album" }, numbered = true) {
-                                                        Tidal.albumTracks(t.albumId)
-                                                    }
+                                                    TrackListScreen(
+                                                        a, t.albumTitle.ifBlank { "Album" },
+                                                        numbered = true,
+                                                        albumId = t.albumId,
+                                                    ) { Tidal.albumTracks(t.albumId) }
                                                 })
                                             }
                                         } else {
@@ -295,17 +297,27 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /** Quick in-app volume: a thin line, tap or drag to set. */
+    /**
+     * Quick in-app volume, styled like LightOS's Notifications sliders:
+     * speaker glyph at the line's left, thin track, thicker fill.
+     */
     @Composable
     private fun VolumeLine(volume: Float, onSet: (Float) -> Unit) {
         val colors = LightThemeTokens.colors
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 1.5f.gridUnitsAsDp()),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            LightIcon(
+                icon = if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER_ON,
+                size = 1.8f,
+            )
+            Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.9f)
+                    .weight(1f)
                     .defaultMinSize(minHeight = 2f.gridUnitsAsDp())
                     .pointerInput(Unit) {
                         awaitEachGesture {

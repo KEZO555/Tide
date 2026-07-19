@@ -51,13 +51,13 @@ class TrackOptionsScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 1f.gridUnitsAsDp()),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = Alignment.End,
             ) {
                 Spacer(modifier = Modifier.height(2f.gridUnitsAsDp()))
                 LightText(
                     text = track.title,
                     variant = LightTextVariant.Subheading,
-                    align = TextAlign.Center,
+                    align = TextAlign.End,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
@@ -66,7 +66,7 @@ class TrackOptionsScreen(
                     text = track.artist,
                     variant = LightTextVariant.Detail,
                     lighten = true,
-                    align = TextAlign.Center,
+                    align = TextAlign.End,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
@@ -85,9 +85,11 @@ class TrackOptionsScreen(
                 if (track.albumId != 0L) {
                     MenuOption("Go to Album") {
                         navigateTo({
-                            TrackListScreen(it, track.albumTitle.ifBlank { "Album" }, numbered = true) {
-                                Tidal.albumTracks(track.albumId)
-                            }
+                            TrackListScreen(
+                                it, track.albumTitle.ifBlank { "Album" },
+                                numbered = true,
+                                albumId = track.albumId,
+                            ) { Tidal.albumTracks(track.albumId) }
                         })
                     }
                 }
@@ -116,13 +118,13 @@ class TrackOptionsScreen(
         }
     }
 
-    /** LightOS menu option: large, centered, roomy. */
+    /** LightOS context-menu option: large, right-aligned, roomy. */
     @Composable
     private fun MenuOption(label: String, onClick: () -> Unit) {
         LightText(
             text = label,
             variant = LightTextVariant.Heading,
-            align = TextAlign.Center,
+            align = TextAlign.End,
             modifier = Modifier
                 .fillMaxWidth()
                 .lightClickable(onClick = onClick)

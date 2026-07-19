@@ -221,6 +221,23 @@ fun TextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     )
 }
 
+/** Underlined "Show All" row under a capped home section. */
+@Composable
+fun ShowAllRow(onClick: () -> Unit) {
+    LightText(
+        text = "Show All",
+        variant = LightTextVariant.Detail,
+        underline = true,
+        modifier = Modifier
+            .lightClickable(onClick = onClick)
+            .padding(
+                start = 1f.gridUnitsAsDp(),
+                top = 0.25f.gridUnitsAsDp(),
+                bottom = 0.5f.gridUnitsAsDp(),
+            ),
+    )
+}
+
 @Composable
 fun SectionHeader(text: String) {
     LightText(
