@@ -144,6 +144,22 @@ object TidePlayer {
         if (queueIndex < _index.value) _index.value = _index.value - 1
     }
 
+    /** Moves a queue entry from one position to another, keeping playback stable. */
+    fun moveInQueue(from: Int, to: Int) {
+        val q = _queue.value.toMutableList()
+        if (from !in q.indices || to !in q.indices || from == to) return
+        val item = q.removeAt(from)
+        q.add(to, item)
+        _queue.value = q
+        val cur = _index.value
+        _index.value = when {
+            from == cur -> to
+            from < cur && to >= cur -> cur - 1
+            from > cur && to <= cur -> cur + 1
+            else -> cur
+        }
+    }
+
     /** Drops everything except the currently playing track. */
     fun clearUpcoming() {
         val cur = _current.value ?: return

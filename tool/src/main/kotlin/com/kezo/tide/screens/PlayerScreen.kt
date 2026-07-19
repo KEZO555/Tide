@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -26,14 +28,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
@@ -65,6 +71,7 @@ import com.thelightphone.sdk.ui.lightClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class PlayerViewModel : LightViewModel<Unit>() {
     /** null = unknown / loading */
@@ -95,7 +102,7 @@ class PlayerViewModel : LightViewModel<Unit>() {
 /**
  * Now Playing in the style of the Light podcast/music tools: back-only header,
  * centered artist / large title, a scrubbable line with elapsed/total time,
- * LightOS transport glyphs, an Up Next hint, and utilities along the bottom.
+ * LightOS transport glyphs, and utilities along the bottom.
  */
 class PlayerScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, PlayerViewModel>(sealedActivity) {
@@ -124,8 +131,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val repeat by TidePlayer.repeat.collectAsState()
         val playbackError by TidePlayer.error.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
-        val queue by TidePlayer.queue.collectAsState()
-        val queueIndex by TidePlayer.index.collectAsState()
 
         LaunchedEffect(track?.id) {
             track?.id?.let(viewModel::refreshFavorite)
@@ -255,40 +260,20 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 }
 
                 if (t != null) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        val next = queue.getOrNull(queueIndex + 1)
-                        if (next != null) {
-                            LightText(
-                                text = "Up Next: ${next.title} · ${next.artist}",
-                                variant = LightTextVariant.Superfine,
-                                lighten = true,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                align = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .lightClickable { navigateTo({ a -> QueueScreen(a) }) }
-                                    .padding(bottom = 0.6f.gridUnitsAsDp()),
-                            )
-                        }
-                        SecondaryControls(
-                            shuffleActive = shuffle,
-                            repeatMode = repeat,
-                            saved = favorite == true,
-                            saveEnabled = favorite != null,
-                            onSaveTap = { viewModel.toggleFavorite(t) },
-                            onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 1.3f.gridUnitsAsDp(),
-                                    vertical = 1.3f.gridUnitsAsDp(),
-                                ),
-                        )
-                    }
+                    SecondaryControls(
+                        shuffleActive = shuffle,
+                        repeatMode = repeat,
+                        saved = favorite == true,
+                        saveEnabled = favorite != null,
+                        onSaveTap = { viewModel.toggleFavorite(t) },
+                        onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 1.3f.gridUnitsAsDp(),
+                                vertical = 1.3f.gridUnitsAsDp(),
+                            ),
+                    )
                 } else {
                     Spacer(modifier = Modifier.height(3.2f.gridUnitsAsDp()))
                 }
@@ -475,6 +460,10 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
 
 class QueueViewModel : LightViewModel<Unit>()
 
+/**
+ * Queue with drag-to-reorder: hold a row and drag vertically to move it,
+ * or fling it sideways while dragging to remove it from the queue.
+ */
 class QueueScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, QueueViewModel>(sealedActivity) {
 
@@ -501,28 +490,86 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                     positionMs / 1000
                 LightText(
                     text = "${(index + 1).coerceAtLeast(1)} of ${queue.size} · " +
-                        "${(remainingSec / 60).coerceAtLeast(0)} min left · Hold to remove",
+                        "${(remainingSec / 60).coerceAtLeast(0)} min left · " +
+                        "Hold then drag to reorder, fling aside to remove",
                     variant = LightTextVariant.Superfine,
                     lighten = true,
                     modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
                 )
-                // open with the playing track in view
+
+                val itemHeightPx = with(LocalDensity.current) { ROW_UNITS.gridUnitsAsDp().toPx() }
                 val listState = rememberLazyListState(
                     initialFirstVisibleItemIndex = (index - 1).coerceAtLeast(0),
                 )
-                LightLazyScrollView(
+                var draggingIndex by remember { mutableIntStateOf(-1) }
+                var dragDy by remember { mutableFloatStateOf(0f) }
+                var dragDx by remember { mutableFloatStateOf(0f) }
+
+                LazyColumn(
+                    state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    listState = listState,
-                    uniformItemHeightGridUnits = ROW_UNITS,
                 ) {
                     items(queue.size) { i ->
-                        NumberedTrackRow(
-                            number = null,
-                            track = queue[i],
-                            active = i == index,
-                            onClick = { TidePlayer.jumpTo(i) },
-                            onLongClick = { TidePlayer.removeFromQueue(i) },
-                        )
+                        val dragging = i == draggingIndex
+                        Box(
+                            modifier = Modifier
+                                .zIndex(if (dragging) 1f else 0f)
+                                .graphicsLayer {
+                                    if (dragging) {
+                                        translationY = dragDy
+                                        translationX = dragDx
+                                        alpha = 0.85f
+                                    }
+                                }
+                                .pointerInput(i) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggingIndex = i
+                                            dragDy = 0f
+                                            dragDx = 0f
+                                        },
+                                        onDrag = { change, amount ->
+                                            change.consume()
+                                            dragDy += amount.y
+                                            dragDx += amount.x
+                                            while (dragDy > itemHeightPx / 2 &&
+                                                draggingIndex < TidePlayer.queue.value.size - 1
+                                            ) {
+                                                TidePlayer.moveInQueue(draggingIndex, draggingIndex + 1)
+                                                draggingIndex++
+                                                dragDy -= itemHeightPx
+                                            }
+                                            while (dragDy < -itemHeightPx / 2 && draggingIndex > 0) {
+                                                TidePlayer.moveInQueue(draggingIndex, draggingIndex - 1)
+                                                draggingIndex--
+                                                dragDy += itemHeightPx
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            if (abs(dragDx) > size.width * 0.35f &&
+                                                abs(dragDy) < itemHeightPx / 2
+                                            ) {
+                                                TidePlayer.removeFromQueue(draggingIndex)
+                                            }
+                                            draggingIndex = -1
+                                            dragDy = 0f
+                                            dragDx = 0f
+                                        },
+                                        onDragCancel = {
+                                            draggingIndex = -1
+                                            dragDy = 0f
+                                            dragDx = 0f
+                                        },
+                                    )
+                                },
+                        ) {
+                            NumberedTrackRow(
+                                number = null,
+                                track = queue[i],
+                                active = i == index,
+                                onClick = { TidePlayer.jumpTo(i) },
+                            )
+                        }
                     }
                 }
                 if (queue.size > 1) {
