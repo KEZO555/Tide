@@ -1,0 +1,475 @@
+package com.kezo.tide.api
+
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpMethod
+import io.ktor.http.Parameters
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import java.io.IOException
+import java.util.Base64
+
+// ---------- domain models ----------
+
+data class Track(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val albumTitle: String,
+    val albumId: Long,
+    val durationSec: Int,
+    val explicit: Boolean,
+    val quality: String,
+)
+
+data class Album(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val numberOfTracks: Int,
+    val year: String,
+)
+
+data class Artist(val id: Long, val name: String)
+
+data class Playlist(
+    val uuid: String,
+    val title: String,
+    val numberOfTracks: Int,
+    val creator: String,
+)
+
+data class SearchResults(
+    val tracks: List<Track>,
+    val albums: List<Album>,
+    val artists: List<Artist>,
+    val playlists: List<Playlist>,
+)
+
+data class DeviceLink(
+    val deviceCode: String,
+    val userCode: String,
+    val verificationUri: String,
+    val intervalSec: Int,
+    val expiresInSec: Int,
+)
+
+class AuthPendingException : Exception("authorization pending")
+
+// ---------- json helpers ----------
+
+private val json = Json { ignoreUnknownKeys = true }
+
+private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+private fun JsonObject.arr(key: String): JsonArray = (this[key] as? JsonArray) ?: JsonArray(emptyList())
+private fun JsonObject.prim(key: String): JsonPrimitive? =
+    (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }
+
+private fun JsonObject.str(key: String): String? = prim(key)?.content
+private fun JsonObject.long(key: String): Long? = prim(key)?.longOrNull
+private fun JsonObject.int(key: String): Int? = prim(key)?.intOrNull
+private fun JsonObject.bool(key: String): Boolean? = prim(key)?.booleanOrNull
+
+// ---------- client ----------
+
+/**
+ * Unofficial TIDAL client speaking the same API the open-source ecosystem
+ * (python-tidal and friends) uses. Requires an active TIDAL subscription;
+ * sign-in happens through TIDAL's own device-link page on another device.
+ */
+object Tidal {
+    private const val AUTH = "https://auth.tidal.com/v1/oauth2"
+    private const val API = "https://api.tidal.com/v1"
+    private const val SCOPE = "r_usr w_usr w_sub"
+
+    // The device-flow client credentials published across open-source TIDAL
+    // clients (identical to the ones shipped in python-tidal).
+    private const val CLIENT_ID = "fX2JxdmntZWK0ixT"
+    private const val CLIENT_SECRET = "1Nn9AfDAjxrgJFJbKNWLeAyKGVGmINuXPPLHVXAvxAg="
+
+    private val KEY_ACCESS = stringPreferencesKey("accessToken")
+    private val KEY_REFRESH = stringPreferencesKey("refreshToken")
+    private val KEY_USER = longPreferencesKey("userId")
+    private val KEY_COUNTRY = stringPreferencesKey("countryCode")
+    private val KEY_QUALITY = stringPreferencesKey("quality")
+
+    private val http = HttpClient(OkHttp)
+
+    private var store: DataStore<Preferences>? = null
+
+    private var accessToken: String? = null
+    private var refreshToken: String? = null
+    var userId: Long = 0L; private set
+    var countryCode: String = "US"; private set
+
+    /** LOW (96 kbps AAC) / HIGH (320 kbps AAC) / LOSSLESS (FLAC) */
+    var quality: String = "HIGH"; private set
+
+    val loggedIn: Boolean get() = refreshToken != null
+
+    fun init(dataStore: DataStore<Preferences>) {
+        if (store == null) store = dataStore
+    }
+
+    /** Loads persisted tokens into memory. Returns true when an account is linked. */
+    suspend fun restore(): Boolean {
+        val p = store?.data?.first() ?: return false
+        accessToken = p[KEY_ACCESS]
+        refreshToken = p[KEY_REFRESH]
+        userId = p[KEY_USER] ?: 0L
+        countryCode = p[KEY_COUNTRY] ?: "US"
+        quality = p[KEY_QUALITY] ?: "HIGH"
+        return loggedIn
+    }
+
+    suspend fun setQuality(value: String) {
+        quality = value
+        store?.edit { it[KEY_QUALITY] = value }
+    }
+
+    suspend fun logout() {
+        accessToken = null
+        refreshToken = null
+        userId = 0L
+        favTrackIds.clear()
+        favIdsLoaded = false
+        store?.edit { it.clear() }
+    }
+
+    private suspend fun persistTokens() {
+        store?.edit { p ->
+            accessToken?.let { p[KEY_ACCESS] = it }
+            refreshToken?.let { p[KEY_REFRESH] = it }
+            p[KEY_USER] = userId
+            p[KEY_COUNTRY] = countryCode
+        }
+    }
+
+    // ---------- oauth device flow ----------
+
+    suspend fun startDeviceLogin(): DeviceLink {
+        val rsp = http.post("$AUTH/device_authorization") {
+            setBody(FormDataContent(Parameters.build {
+                append("client_id", CLIENT_ID)
+                append("scope", SCOPE)
+            }))
+        }
+        val body = json.parseToJsonElement(rsp.bodyAsText()) as JsonObject
+        if (!rsp.status.isSuccess()) {
+            throw IOException(body.str("error_description") ?: "device link failed (${rsp.status.value})")
+        }
+        return DeviceLink(
+            deviceCode = body.str("deviceCode") ?: throw IOException("bad device auth response"),
+            userCode = body.str("userCode") ?: "",
+            verificationUri = body.str("verificationUriComplete") ?: body.str("verificationUri") ?: "link.tidal.com",
+            intervalSec = body.int("interval") ?: 2,
+            expiresInSec = body.int("expiresIn") ?: 300,
+        )
+    }
+
+    /** One poll of the token endpoint; throws [AuthPendingException] until the user confirms. */
+    suspend fun pollDeviceLogin(deviceCode: String) {
+        val rsp = http.post("$AUTH/token") {
+            setBody(FormDataContent(Parameters.build {
+                append("client_id", CLIENT_ID)
+                append("client_secret", CLIENT_SECRET)
+                append("device_code", deviceCode)
+                append("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+                append("scope", SCOPE)
+            }))
+        }
+        val body = json.parseToJsonElement(rsp.bodyAsText()) as JsonObject
+        if (!rsp.status.isSuccess()) {
+            val err = body.str("error")
+            if (err == "authorization_pending" || err == "slow_down") throw AuthPendingException()
+            throw IOException(body.str("error_description") ?: "sign in failed ($err)")
+        }
+        applyTokenResponse(body)
+        loadSession()
+        persistTokens()
+    }
+
+    private fun applyTokenResponse(body: JsonObject) {
+        accessToken = body.str("access_token")
+        body.str("refresh_token")?.let { refreshToken = it }
+        body.obj("user")?.let { u ->
+            u.long("userId")?.let { userId = it }
+            u.str("countryCode")?.let { countryCode = it }
+        }
+    }
+
+    private suspend fun refreshAccessToken(): Boolean {
+        val rt = refreshToken ?: return false
+        val rsp = http.post("$AUTH/token") {
+            setBody(FormDataContent(Parameters.build {
+                append("client_id", CLIENT_ID)
+                append("client_secret", CLIENT_SECRET)
+                append("refresh_token", rt)
+                append("grant_type", "refresh_token")
+                append("scope", SCOPE)
+            }))
+        }
+        if (!rsp.status.isSuccess()) return false
+        applyTokenResponse(json.parseToJsonElement(rsp.bodyAsText()) as JsonObject)
+        persistTokens()
+        return true
+    }
+
+    private suspend fun loadSession() {
+        try {
+            val s = apiObject("sessions")
+            s.long("userId")?.let { userId = it }
+            s.str("countryCode")?.let { countryCode = it }
+        } catch (_: Exception) {
+            // userId/country usually arrive with the token response; not fatal
+        }
+    }
+
+    // ---------- generic request ----------
+
+    private suspend fun api(
+        path: String,
+        params: Map<String, String> = emptyMap(),
+        method: HttpMethod = HttpMethod.Get,
+        form: Map<String, String>? = null,
+        retry: Boolean = true,
+    ): String {
+        val rsp = http.request("$API/$path") {
+            this.method = method
+            parameter("countryCode", countryCode)
+            params.forEach { (k, v) -> parameter(k, v) }
+            header("Authorization", "Bearer ${accessToken ?: ""}")
+            if (form != null) {
+                setBody(FormDataContent(Parameters.build {
+                    form.forEach { (k, v) -> append(k, v) }
+                }))
+            }
+        }
+        if (rsp.status.value == 401 && retry && refreshAccessToken()) {
+            return api(path, params, method, form, retry = false)
+        }
+        val text = rsp.bodyAsText()
+        if (!rsp.status.isSuccess()) {
+            val message = try {
+                (json.parseToJsonElement(text) as? JsonObject)?.str("userMessage")
+            } catch (_: Exception) {
+                null
+            }
+            throw IOException(message ?: "request failed (${rsp.status.value})")
+        }
+        return text
+    }
+
+    private suspend fun apiObject(path: String, params: Map<String, String> = emptyMap()): JsonObject =
+        json.parseToJsonElement(api(path, params)) as JsonObject
+
+    /** Pages through a list endpoint until exhausted (capped so huge libraries stay bounded). */
+    private suspend fun paged(
+        path: String,
+        extra: Map<String, String> = emptyMap(),
+        cap: Int = 1000,
+    ): List<JsonObject> {
+        val out = ArrayList<JsonObject>()
+        val limit = 50
+        var offset = 0
+        while (out.size < cap) {
+            val page = apiObject(path, extra + mapOf("limit" to "$limit", "offset" to "$offset"))
+            val items = page.arr("items")
+            items.forEach { (it as? JsonObject)?.let(out::add) }
+            if (items.size < limit) break
+            offset += limit
+        }
+        return out
+    }
+
+    // ---------- parsing ----------
+
+    private fun parseTrack(o: JsonObject): Track? {
+        val t = o.obj("item") ?: o
+        val album = t.obj("album")
+        return Track(
+            id = t.long("id") ?: return null,
+            title = t.str("title") ?: "unknown",
+            artist = t.obj("artist")?.str("name")
+                ?: (t.arr("artists").firstOrNull() as? JsonObject)?.str("name") ?: "",
+            albumTitle = album?.str("title") ?: "",
+            albumId = album?.long("id") ?: 0L,
+            durationSec = t.int("duration") ?: 0,
+            explicit = t.bool("explicit") ?: false,
+            quality = t.str("audioQuality") ?: "",
+        )
+    }
+
+    private fun parseAlbum(o: JsonObject): Album? {
+        val a = o.obj("item") ?: o
+        return Album(
+            id = a.long("id") ?: return null,
+            title = a.str("title") ?: "unknown",
+            artist = a.obj("artist")?.str("name")
+                ?: (a.arr("artists").firstOrNull() as? JsonObject)?.str("name") ?: "",
+            numberOfTracks = a.int("numberOfTracks") ?: 0,
+            year = (a.str("releaseDate") ?: "").take(4),
+        )
+    }
+
+    private fun parseArtist(o: JsonObject): Artist? {
+        val a = o.obj("item") ?: o
+        return Artist(id = a.long("id") ?: return null, name = a.str("name") ?: "unknown")
+    }
+
+    private fun parsePlaylist(o: JsonObject): Playlist? {
+        val p = o.obj("playlist") ?: o.obj("item") ?: o
+        return Playlist(
+            uuid = p.str("uuid") ?: return null,
+            title = p.str("title") ?: "unknown",
+            numberOfTracks = p.int("numberOfTracks") ?: 0,
+            creator = p.obj("creator")?.str("name") ?: "",
+        )
+    }
+
+    // ---------- library ----------
+
+    private val recentOrder = mapOf("order" to "DATE", "orderDirection" to "DESC")
+
+    suspend fun favoriteTracks(): List<Track> =
+        paged("users/$userId/favorites/tracks", recentOrder).mapNotNull(::parseTrack)
+
+    suspend fun favoriteAlbums(): List<Album> =
+        paged("users/$userId/favorites/albums", recentOrder).mapNotNull(::parseAlbum)
+
+    suspend fun favoriteArtists(): List<Artist> =
+        paged("users/$userId/favorites/artists", recentOrder).mapNotNull(::parseArtist)
+
+    suspend fun playlists(): List<Playlist> =
+        paged("users/$userId/playlistsAndFavoritePlaylists").mapNotNull(::parsePlaylist)
+
+    suspend fun albumTracks(albumId: Long): List<Track> =
+        paged("albums/$albumId/tracks").mapNotNull(::parseTrack)
+
+    suspend fun playlistTracks(uuid: String): List<Track> =
+        paged("playlists/$uuid/tracks").mapNotNull(::parseTrack)
+
+    suspend fun artistTopTracks(artistId: Long): List<Track> =
+        paged("artists/$artistId/toptracks", cap = 20).mapNotNull(::parseTrack)
+
+    suspend fun artistAlbums(artistId: Long): List<Album> =
+        paged("artists/$artistId/albums").mapNotNull(::parseAlbum)
+
+    suspend fun search(query: String): SearchResults {
+        val r = apiObject(
+            "search", mapOf(
+                "query" to query,
+                "limit" to "20",
+                "types" to "ARTISTS,ALBUMS,TRACKS,PLAYLISTS",
+            )
+        )
+        fun items(key: String): List<JsonObject> =
+            r.obj(key)?.arr("items")?.mapNotNull { it as? JsonObject } ?: emptyList()
+        return SearchResults(
+            tracks = items("tracks").mapNotNull(::parseTrack),
+            albums = items("albums").mapNotNull(::parseAlbum),
+            artists = items("artists").mapNotNull(::parseArtist),
+            playlists = items("playlists").mapNotNull(::parsePlaylist),
+        )
+    }
+
+    // ---------- favorites (write) ----------
+
+    val favTrackIds = LinkedHashSet<Long>()
+    private var favIdsLoaded = false
+
+    suspend fun ensureFavTrackIds() {
+        if (favIdsLoaded) return
+        try {
+            val ids = apiObject("users/$userId/favorites/ids")
+            ids.arr("TRACK").forEach { el ->
+                (el as? JsonPrimitive)?.content?.toLongOrNull()?.let(favTrackIds::add)
+            }
+            favIdsLoaded = true
+        } catch (_: Exception) {
+            // favorite state stays unknown until this succeeds
+        }
+    }
+
+    suspend fun addFavoriteTrack(id: Long) {
+        api("users/$userId/favorites/tracks", method = HttpMethod.Post, form = mapOf("trackIds" to "$id"))
+        favTrackIds.add(id)
+    }
+
+    suspend fun removeFavoriteTrack(id: Long) {
+        api("users/$userId/favorites/tracks/$id", method = HttpMethod.Delete)
+        favTrackIds.remove(id)
+    }
+
+    suspend fun addFavoriteAlbum(id: Long) {
+        api("users/$userId/favorites/albums", method = HttpMethod.Post, form = mapOf("albumIds" to "$id"))
+    }
+
+    suspend fun removeFavoriteAlbum(id: Long) {
+        api("users/$userId/favorites/albums/$id", method = HttpMethod.Delete)
+    }
+
+    suspend fun addFavoriteArtist(id: Long) {
+        api("users/$userId/favorites/artists", method = HttpMethod.Post, form = mapOf("artistIds" to "$id"))
+    }
+
+    suspend fun removeFavoriteArtist(id: Long) {
+        api("users/$userId/favorites/artists/$id", method = HttpMethod.Delete)
+    }
+
+    suspend fun addFavoritePlaylist(uuid: String) {
+        api("users/$userId/favorites/playlists", method = HttpMethod.Post, form = mapOf("uuids" to uuid))
+    }
+
+    suspend fun removeFavoritePlaylist(uuid: String) {
+        api("users/$userId/favorites/playlists/$uuid", method = HttpMethod.Delete)
+    }
+
+    // ---------- playback ----------
+
+    /**
+     * Resolves a direct stream URL. Tries the configured quality first, stepping
+     * down whenever the service answers with a DASH manifest (hi-res tiers) that
+     * the simple progressive player can't consume.
+     */
+    suspend fun streamUrl(trackId: Long): String {
+        val ladder = listOf(quality, "HIGH", "LOW").distinct()
+        for (q in ladder) {
+            val info = apiObject(
+                "tracks/$trackId/playbackinfopostpaywall", mapOf(
+                    "audioquality" to q,
+                    "playbackmode" to "STREAM",
+                    "assetpresentation" to "FULL",
+                )
+            )
+            val mime = info.str("manifestMimeType") ?: ""
+            val manifestB64 = info.str("manifest") ?: continue
+            if (!mime.contains("vnd.tidal.bts")) continue
+            val manifest = json.parseToJsonElement(
+                String(Base64.getMimeDecoder().decode(manifestB64))
+            ) as JsonObject
+            (manifest.arr("urls").firstOrNull() as? JsonPrimitive)?.content?.let { return it }
+        }
+        throw IOException("no playable stream")
+    }
+}
