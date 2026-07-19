@@ -13,39 +13,40 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import com.kezo.tide.R
 import com.kezo.tide.api.Track
 import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIconConfiguration
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTheme
+import com.thelightphone.sdk.ui.LightThemeColors
 import com.thelightphone.sdk.ui.LightThemeController
 import com.thelightphone.sdk.ui.LightThemeTokens
-import com.thelightphone.sdk.ui.LightTypography
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 
-/** Height (in LightOS grid units) of every uniform list row in the tool. */
-const val ROW_UNITS = 3f
+/**
+ * Height (in LightOS grid units) of every uniform list row in the tool.
+ * Phono's library rows: large title + lighter secondary line, roomy spacing.
+ */
+const val ROW_UNITS = 4.5f
 
 sealed interface UiState<out T> {
     data object Loading : UiState<Nothing>
@@ -54,42 +55,13 @@ sealed interface UiState<out T> {
 }
 
 /**
- * Echo uses Public Sans for every piece of text; same face, LightOS size table.
+ * Standard screen chrome. Uses the SDK's default typography, which resolves to
+ * the LP3's system Akkurat face at LightOS sizes — the same look as Phono.
  */
-@Composable
-fun publicSansTypography(): LightTypography {
-    return remember {
-        val family = FontFamily(Font(R.font.publicsans_regular, FontWeight.Normal))
-        fun style(size: Double, lineHeightFactor: Double, letterSpacingFactor: Double = 0.0) =
-            TextStyle(
-                fontSize = size.sp,
-                fontFamily = family,
-                fontWeight = FontWeight.Normal,
-                lineHeight = (size * lineHeightFactor).sp,
-                letterSpacing = if (letterSpacingFactor > 0) (size * letterSpacingFactor).sp else androidx.compose.ui.unit.TextUnit.Unspecified,
-            )
-        LightTypography(
-            title = style(115.0, 1.10),
-            subtitle = style(52.0, 1.20),
-            heading = style(38.0, 1.35),
-            subheading = style(30.0, 1.25, 0.03),
-            copy = style(30.0, 1.50),
-            button = style(30.0, 1.10, 0.15),
-            paragraph = style(24.5, 1.25),
-            paragraphWide = style(25.0, 1.30, 0.02),
-            detail = style(20.0, 1.45),
-            fine = style(25.0, 1.15, 0.03),
-            superfine = style(16.0, 1.20),
-            micro = style(8.0, 1.20),
-        )
-    }
-}
-
-/** Standard screen chrome: echo-style theme (Public Sans) + background fill. */
 @Composable
 fun TideScreen(content: @Composable ColumnScope.() -> Unit) {
     val themeColors by LightThemeController.colors.collectAsState()
-    LightTheme(colors = themeColors, typography = publicSansTypography()) {
+    LightTheme(colors = themeColors) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -135,7 +107,8 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Echo's TrackListItem: "N." number column, track name, "artist · duration" below.
+ * Phono library track row: number column, large title, lighter
+ * "artist · duration" line beneath.
  */
 @Composable
 fun NumberedTrackRow(
@@ -164,7 +137,7 @@ fun NumberedTrackRow(
         Column(modifier = Modifier.fillMaxWidth()) {
             LightText(
                 text = track.title,
-                variant = LightTextVariant.Fine,
+                variant = LightTextVariant.Heading,
                 underline = active,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -173,7 +146,7 @@ fun NumberedTrackRow(
                 text = listOf(track.artist, formatTime(track.durationSec * 1000))
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
-                variant = LightTextVariant.Superfine,
+                variant = LightTextVariant.Fine,
                 lighten = true,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -182,7 +155,7 @@ fun NumberedTrackRow(
     }
 }
 
-/** Echo's MediaListItem: primary text with secondary line, no number column. */
+/** Phono library media row: large title with a lighter secondary line. */
 @Composable
 fun MediaRow(
     primary: String,
@@ -199,14 +172,14 @@ fun MediaRow(
     ) {
         LightText(
             text = primary,
-            variant = LightTextVariant.Fine,
+            variant = LightTextVariant.Heading,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (secondary.isNotBlank()) {
             LightText(
                 text = secondary,
-                variant = LightTextVariant.Superfine,
+                variant = LightTextVariant.Fine,
                 lighten = true,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -215,7 +188,7 @@ fun MediaRow(
     }
 }
 
-/** Echo's StyledButton: large text, underlined, in a full-width row. */
+/** Large underlined text button row. */
 @Composable
 fun TextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     LightText(
@@ -244,7 +217,7 @@ fun SectionHeader(text: String) {
 }
 
 /**
- * Echo's progress bar: a thin full-width line with a thicker filled portion,
+ * Playback progress: a thin full-width line with a thicker filled portion,
  * both in the content color. Tap to seek when [onSeekFraction] is set.
  */
 @Composable
@@ -305,30 +278,65 @@ fun TimeRow(positionMs: Int, durationMs: Int, modifier: Modifier = Modifier) {
     }
 }
 
+// ---------- tab bar (Phono's navbar) ----------
+
+sealed interface TabIcon {
+    data class Light(val icon: LightIconConfiguration) : TabIcon
+    data class Vector(val icon: ImageVector) : TabIcon
+}
+
+private const val TAB_ICON_SIZE_UNITS = 2.55f
+private const val TAB_BAR_HEIGHT_UNITS = 3.5f
+
+@Composable
+fun inactiveTabColor(): Color =
+    if (LightThemeTokens.colors == LightThemeColors.Dark) Color(0xFF6E6E6E)
+    else Color(0xFFC1C1C1)
+
 /**
- * Echo's Navbar: a row of icon tabs, space-between, active icon at full
- * strength and inactive ones dimmed.
+ * Phono's tab bar: icon logos in a space-between row, active at full content
+ * color, inactive dimmed gray.
  */
 @Composable
 fun TabBar(
-    tabs: List<Pair<LightIconConfiguration, Boolean>>,
+    tabs: List<Pair<TabIcon, Boolean>>,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = LightThemeTokens.colors
+    val inactive = inactiveTabColor()
+    val barHeight = TAB_BAR_HEIGHT_UNITS.gridUnitsAsDp()
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 1.2f.gridUnitsAsDp(), vertical = 0.6f.gridUnitsAsDp()),
+            .padding(top = 0.5f.gridUnitsAsDp())
+            .height(barHeight)
+            .padding(horizontal = 0.35f.gridUnitsAsDp()),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         tabs.forEachIndexed { i, (icon, active) ->
+            val tint = if (active) colors.content else inactive
             Box(
                 modifier = Modifier
-                    .alpha(if (active) 1f else 0.43f)
+                    .size(barHeight)
                     .lightClickable { onSelect(i) },
+                contentAlignment = Alignment.Center,
             ) {
-                LightIcon(icon = icon, size = 2.2f)
+                when (icon) {
+                    is TabIcon.Light -> LightIcon(
+                        icon = icon.icon,
+                        size = TAB_ICON_SIZE_UNITS,
+                        modifier = Modifier.alpha(if (active) 1f else 0.43f),
+                    )
+
+                    is TabIcon.Vector -> Icon(
+                        painter = rememberVectorPainter(icon.icon),
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier.size(TAB_ICON_SIZE_UNITS.gridUnitsAsDp()),
+                    )
+                }
             }
         }
     }

@@ -59,5 +59,6 @@ kotlin {
 
 dependencies {
     implementation(project(":sdk:client"))
+    implementation("androidx.compose.material:material-icons-extended")
     testImplementation(libs.kotlin.test)
 }

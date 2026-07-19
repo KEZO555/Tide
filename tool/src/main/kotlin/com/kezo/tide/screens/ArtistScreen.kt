@@ -76,6 +76,10 @@ class ArtistScreen(
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text(artist.name),
+                rightButton = LightBarButton.LightIcon(
+                    LightIcons.AUDIO_MESSAGE,
+                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                ),
             )
             Column(modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp())) {
                 Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))

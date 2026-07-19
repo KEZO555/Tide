@@ -1,17 +1,32 @@
 package com.kezo.tide.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.viewModelScope
@@ -28,6 +43,7 @@ import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.SectionHeader
 import com.kezo.tide.ui.TabBar
+import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
 import com.kezo.tide.ui.TideScreen
 import com.kezo.tide.ui.UiState
@@ -35,18 +51,18 @@ import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
-import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
-import com.thelightphone.sdk.ui.LightTextInputEditor
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightThemeColors
 import com.thelightphone.sdk.ui.LightThemeController
+import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.designVerticalPxToDp
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -324,31 +340,24 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.ReadyContent() {
         val tab by viewModel.tab.collectAsState()
-        val searchMode by viewModel.searchMode.collectAsState()
-
-        // Search input takes the whole screen (the keyboard replaces the tab bar)
-        if (tab == MainTab.Search && searchMode is MainViewModel.SearchMode.Input) {
-            SearchInput()
-            return
-        }
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 MainTab.Liked -> LikedTab()
                 MainTab.Albums -> AlbumsTab()
                 MainTab.Playlists -> PlaylistsTab()
-                MainTab.Search -> SearchResultsTab()
+                MainTab.Search -> SearchTab()
                 MainTab.Settings -> SettingsTab()
             }
         }
 
         TabBar(
             tabs = listOf(
-                LightIcons.STAR to (tab == MainTab.Liked),
-                LightIcons.MEDIA to (tab == MainTab.Albums),
-                LightIcons.LIST to (tab == MainTab.Playlists),
-                LightIcons.SEARCH to (tab == MainTab.Search),
-                LightIcons.ELLIPSES to (tab == MainTab.Settings),
+                TabIcon.Vector(Icons.Filled.Favorite) to (tab == MainTab.Liked),
+                TabIcon.Vector(Icons.Filled.Album) to (tab == MainTab.Albums),
+                TabIcon.Light(LightIcons.LIST) to (tab == MainTab.Playlists),
+                TabIcon.Vector(Icons.Filled.Search) to (tab == MainTab.Search),
+                TabIcon.Vector(Icons.Filled.MoreHoriz) to (tab == MainTab.Settings),
             ),
             onSelect = { i -> viewModel.selectTab(MainTab.entries[i]) },
         )
@@ -356,17 +365,14 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
     @Composable
     private fun TabHeader(title: String) {
-        val current by TidePlayer.current.collectAsState()
+        // Phono-style header: centered title with the now-playing waveform
+        // logo in the top-right on every screen.
         LightTopBar(
             center = LightTopBarCenter.Text(title),
-            rightButton = if (current != null) {
-                LightBarButton.LightIcon(
-                    LightIcons.PLAY,
-                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
-                )
-            } else {
-                null
-            },
+            rightButton = LightBarButton.LightIcon(
+                LightIcons.AUDIO_MESSAGE,
+                onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+            ),
         )
     }
 
@@ -475,29 +481,54 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
     // ---------- search ----------
 
+    /** Inline search field using the device's own keyboard (system IME). */
     @Composable
-    private fun SearchInput() {
-        val textFieldState = rememberTextFieldState("")
-        val keyboardOptionsFlow = rememberKeyboardOptions()
-        LightTextInputEditor(
-            title = "Search",
-            editorKey = viewModel.searchSession,
-            state = textFieldState,
-            onSubmit = viewModel::submitSearch,
-            onBack = { viewModel.selectTab(MainTab.Liked) },
-            keyboardOptionsFlow = keyboardOptionsFlow,
-            submitIcon = LightIcons.SEARCH,
-            singleLine = true,
-            modifier = Modifier.fillMaxSize(),
-        )
+    private fun SearchField() {
+        val colors = LightThemeTokens.colors
+        var query by remember(viewModel.searchSession) { mutableStateOf("") }
+        val focusRequester = remember { FocusRequester() }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 1f.gridUnitsAsDp()),
+        ) {
+            LightText(text = "Search:", variant = LightTextVariant.Detail, lighten = true)
+            BasicTextField(
+                value = query,
+                onValueChange = { query = it },
+                textStyle = LightThemeTokens.typography.heading.copy(color = colors.content),
+                singleLine = true,
+                cursorBrush = SolidColor(colors.content),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(query) }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 0.5f.gridUnitsAsDp())
+                    .focusRequester(focusRequester),
+            )
+            Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3f.designVerticalPxToDp())
+                    .background(colors.content),
+            )
+        }
+        LaunchedEffect(viewModel.searchSession) {
+            focusRequester.requestFocus()
+        }
     }
 
     @Composable
-    private fun ColumnScope.SearchResultsTab() {
+    private fun ColumnScope.SearchTab() {
         val mode by viewModel.searchMode.collectAsState()
         val current by TidePlayer.current.collectAsState()
         when (val m = mode) {
-            is MainViewModel.SearchMode.Input -> Unit
+            is MainViewModel.SearchMode.Input -> {
+                TabHeader("Search")
+                SearchField()
+            }
+
             is MainViewModel.SearchMode.Searching -> {
                 SearchHeader(m.query)
                 LoadingText()

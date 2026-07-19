@@ -73,6 +73,10 @@ class TrackListScreen(
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text(title),
+                rightButton = LightBarButton.LightIcon(
+                    LightIcons.AUDIO_MESSAGE,
+                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                ),
             )
             when (val s = state) {
                 is UiState.Loading -> LoadingText()
@@ -125,6 +129,10 @@ class AlbumListScreen(
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text(title),
+                rightButton = LightBarButton.LightIcon(
+                    LightIcons.AUDIO_MESSAGE,
+                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                ),
             )
             when (val s = state) {
                 is UiState.Loading -> LoadingText()
@@ -177,6 +185,10 @@ class ArtistListScreen(
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text("Artists"),
+                rightButton = LightBarButton.LightIcon(
+                    LightIcons.AUDIO_MESSAGE,
+                    onClick = { navigateTo({ a -> PlayerScreen(a) }) },
+                ),
             )
             when (val s = state) {
                 is UiState.Loading -> LoadingText()
