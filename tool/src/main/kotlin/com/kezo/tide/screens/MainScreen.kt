@@ -109,6 +109,8 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
 
     val quality = MutableStateFlow("HIGH")
 
+    val homeArtists = MutableStateFlow<UiState<List<com.kezo.tide.api.Artist>>>(UiState.Loading)
+
     private val loadedTabs = HashSet<MainTab>()
 
     init {
@@ -118,6 +120,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
                 session.value = Session.Ready
+                ensureLoaded(MainTab.Home)
                 ensureLoaded(MainTab.Liked)
             } else {
                 session.value = Session.LoggedOut()
@@ -133,12 +136,24 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     private fun ensureLoaded(t: MainTab) {
         if (t in loadedTabs) return
         when (t) {
+            MainTab.Home -> reloadHomeArtists()
             MainTab.Liked -> reloadLiked()
             MainTab.Albums -> reloadAlbums()
             MainTab.Playlists -> reloadPlaylists()
             else -> return
         }
         loadedTabs.add(t)
+    }
+
+    fun reloadHomeArtists() {
+        homeArtists.value = UiState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            homeArtists.value = try {
+                UiState.Data(Tidal.favoriteArtists())
+            } catch (e: Exception) {
+                UiState.Failed(e.message ?: "Something went wrong")
+            }
+        }
     }
 
     fun reloadLiked() {
@@ -190,6 +205,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
                         Tidal.pollDeviceLogin(link.deviceCode)
                         quality.value = Tidal.quality
                         session.value = Session.Ready
+                        ensureLoaded(MainTab.Home)
                         ensureLoaded(MainTab.Liked)
                         return@launch
                     } catch (_: AuthPendingException) {
@@ -395,23 +411,20 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.HomeTab() {
         val recents by Recents.tracks.collectAsState()
+        val artists by viewModel.homeArtists.collectAsState()
         val current by TidePlayer.current.collectAsState()
-        // Echo's home: a titled full-height list, nothing else
-        TabHeader("Recently Played")
-        if (recents.isEmpty()) {
-            LightText(
-                text = "Play something and it will show up here.",
-                variant = LightTextVariant.Fine,
-                lighten = true,
-                modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
-            )
-        } else {
-            LightLazyScrollView(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                uniformItemHeightGridUnits = ROW_UNITS,
-            ) {
-                items(recents.size) { i ->
-                    val track = recents[i]
+        TabHeader("Home")
+        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            SectionHeader("Recently Played")
+            if (recents.isEmpty()) {
+                LightText(
+                    text = "Play something and it will show up here.",
+                    variant = LightTextVariant.Fine,
+                    lighten = true,
+                    modifier = Modifier.padding(horizontal = 1f.gridUnitsAsDp()),
+                )
+            } else {
+                recents.take(5).forEachIndexed { i, track ->
                     NumberedTrackRow(
                         number = null,
                         track = track,
@@ -426,6 +439,26 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     )
                 }
             }
+
+            SectionHeader("Artists")
+            when (val s = artists) {
+                is UiState.Loading -> LoadingText()
+                is UiState.Failed -> ErrorRetry(s.message, onRetry = viewModel::reloadHomeArtists)
+                is UiState.Data -> {
+                    if (s.value.isEmpty()) {
+                        EmptyText("Favorite an artist and it will show up here.")
+                    } else {
+                        s.value.forEach { artist ->
+                            MediaRow(
+                                primary = artist.name,
+                                secondary = "",
+                                onClick = { navigateTo({ ArtistScreen(it, artist) }) },
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
         }
     }
 

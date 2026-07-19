@@ -63,6 +63,16 @@ object TidePlayer {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _volume = MutableStateFlow(1f)
+    val volume: StateFlow<Float> = _volume.asStateFlow()
+
+    /** In-app volume multiplier (0..1); hardware keys still set system volume. */
+    fun setVolume(value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        _volume.value = v
+        runCatching { player?.setVolume(v, v) }
+    }
+
     private var originalQueue: List<Track> = emptyList()
 
     init {
@@ -201,6 +211,7 @@ object TidePlayer {
                     if (gen != generation) return@setOnPreparedListener
                     prepared = true
                     _durationMs.value = if (it.duration > 0) it.duration else track.durationSec * 1000
+                    it.setVolume(_volume.value, _volume.value)
                     it.start()
                     _isLoading.value = false
                     _isPlaying.value = true

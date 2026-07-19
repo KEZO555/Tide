@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -131,6 +132,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val repeat by TidePlayer.repeat.collectAsState()
         val playbackError by TidePlayer.error.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
+        val volume by TidePlayer.volume.collectAsState()
+        var showVolume by remember { mutableStateOf(false) }
 
         LaunchedEffect(track?.id) {
             track?.id?.let(viewModel::refreshFavorite)
@@ -140,7 +143,18 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             val t = track
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                rightButton = if (t != null) {
+                    LightBarButton.LightIcon(
+                        if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER,
+                        onClick = { showVolume = !showVolume },
+                    )
+                } else {
+                    null
+                },
             )
+            if (showVolume && t != null) {
+                VolumeLine(volume = volume, onSet = TidePlayer::setVolume)
+            }
 
             Column(
                 modifier = Modifier
@@ -277,6 +291,52 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 } else {
                     Spacer(modifier = Modifier.height(3.2f.gridUnitsAsDp()))
                 }
+            }
+        }
+    }
+
+    /** Quick in-app volume: a thin line, tap or drag to set. */
+    @Composable
+    private fun VolumeLine(volume: Float, onSet: (Float) -> Unit) {
+        val colors = LightThemeTokens.colors
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .defaultMinSize(minHeight = 2f.gridUnitsAsDp())
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            down.consume()
+                            fun setAt(x: Float) {
+                                onSet((x / size.width).coerceIn(0f, 1f))
+                            }
+                            setAt(down.position.x)
+                            drag(down.id) { change ->
+                                change.consume()
+                                setAt(change.position.x)
+                            }
+                        }
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.13f.gridUnitsAsDp())
+                        .align(Alignment.Center)
+                        .background(colors.content),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(volume)
+                        .height(0.38f.gridUnitsAsDp())
+                        .align(Alignment.CenterStart)
+                        .background(colors.content),
+                )
             }
         }
     }
