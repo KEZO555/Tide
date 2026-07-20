@@ -49,12 +49,13 @@ import com.kezo.tide.ui.PlayerPresence
 import com.kezo.tide.ui.ROW_UNITS
 import com.kezo.tide.ui.SectionHeader
 import com.kezo.tide.ui.SectionLabel
+import com.kezo.tide.ui.SettingsNavRow
+import com.kezo.tide.ui.SettingsToggleRow
 import com.kezo.tide.ui.ShowAllRow
 import com.kezo.tide.ui.TabBar
 import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
 import com.kezo.tide.ui.TideScreen
-import com.kezo.tide.ui.ToggleRow
 import com.kezo.tide.ui.UiState
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
@@ -441,7 +442,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         LightTopBar(
             center = LightTopBarCenter.Text(title),
             rightButton = LightBarButton.LightIcon(
-                LightIcons.AUDIO_MESSAGE,
+                LightIcons.MEDIA,
                 onClick = {
                     if (PlayerPresence.openCount > 0) goBack()
                     else navigateTo({ a -> PlayerScreen(a) })
@@ -898,34 +899,36 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     .padding(horizontal = 1f.gridUnitsAsDp()),
             ) {
                 SectionLabel("Appearance")
-                ToggleRow(
+                SettingsToggleRow(
                     label = "Dark mode",
                     checked = themeColors == LightThemeColors.Dark,
                     onToggle = { LightThemeController.toggle() },
                 )
 
-                SectionLabel("Audio quality")
-                listOf(
-                    "LOW" to "Low (96 kbps)",
-                    "HIGH" to "High (320 kbps)",
-                    "LOSSLESS" to "Lossless (FLAC)",
-                ).forEach { (value, label) ->
-                    ActionRow(
-                        text = label,
-                        selected = quality == value,
-                        onClick = { viewModel.setQuality(value) },
-                    )
-                }
+                SectionLabel("Playback")
+                SettingsNavRow(
+                    label = "Audio Quality",
+                    value = qualityLabel(quality),
+                    onClick = {
+                        navigateTo({ a ->
+                            AudioQualityScreen(a, viewModel.quality, viewModel::setQuality)
+                        })
+                    },
+                )
 
                 SectionLabel("Library")
-                ActionRow(text = "Artists", onClick = { navigateTo({ ArtistListScreen(it) }) })
+                SettingsNavRow(label = "Artists") { navigateTo({ ArtistListScreen(it) }) }
 
                 SectionLabel("Customize")
-                ActionRow(text = "Home Sections", onClick = { navigateTo({ HomeSectionsScreen(it) }) })
-                ActionRow(text = "Navigation Bar", onClick = { navigateTo({ NavBarScreen(it) }) })
+                SettingsNavRow(label = "Home Sections") {
+                    navigateTo({ HomeSectionsScreen(it) })
+                }
+                SettingsNavRow(label = "Navigation Bar") {
+                    navigateTo({ NavBarScreen(it) })
+                }
 
                 SectionLabel("Account")
-                ActionRow(text = "Logout", onClick = { confirmLogout = true })
+                SettingsNavRow(label = "Logout", chevron = false) { confirmLogout = true }
 
                 LightText(
                     text = "Tide · Unofficial TIDAL client · User ${Tidal.userId}",

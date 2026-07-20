@@ -296,6 +296,72 @@ fun ActionRow(text: String, selected: Boolean = false, onClick: () -> Unit) {
     )
 }
 
+/**
+ * LightOS settings row: label on the left, an optional current value and a
+ * chevron on the right — the standard "drill into a sub-page" row.
+ */
+@Composable
+fun SettingsNavRow(
+    label: String,
+    value: String? = null,
+    chevron: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ROW_UNITS.gridUnitsAsDp())
+            .lightClickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LightText(
+            text = label,
+            variant = LightTextVariant.Copy,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (!value.isNullOrBlank()) {
+            LightText(
+                text = value,
+                variant = LightTextVariant.Detail,
+                lighten = true,
+                maxLines = 1,
+                modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()),
+            )
+        }
+        if (chevron) {
+            LightIcon(
+                icon = LightIcons.ARROW_RIGHT,
+                size = 1.3f,
+                modifier = Modifier.alpha(0.5f),
+            )
+        }
+    }
+}
+
+/** LightOS settings toggle row: label on the left, switch glyph on the right. */
+@Composable
+fun SettingsToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ROW_UNITS.gridUnitsAsDp())
+            .lightClickable { onToggle(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LightText(
+            text = label,
+            variant = LightTextVariant.Copy,
+            modifier = Modifier.weight(1f),
+        )
+        LightIcon(
+            // LightIcons names are inverted vs the artwork (knob-left is labeled ON).
+            icon = if (checked) LightIcons.TOGGLE_OFF else LightIcons.TOGGLE_ON,
+        )
+    }
+}
+
 /** LightOS toggle row: switch glyph on the left, label beside it. */
 @Composable
 fun ToggleRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {

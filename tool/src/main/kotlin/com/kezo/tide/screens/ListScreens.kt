@@ -134,7 +134,7 @@ class TrackListScreen(
                     )
                 } else {
                     LightBarButton.LightIcon(
-                        LightIcons.AUDIO_MESSAGE,
+                        LightIcons.MEDIA,
                         onClick = {
                             if (PlayerPresence.openCount > 0) goBack()
                             else navigateTo({ a -> PlayerScreen(a) })
@@ -195,7 +195,7 @@ class ArtistListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text("Artists"),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.AUDIO_MESSAGE,
+                    LightIcons.MEDIA,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })
@@ -251,7 +251,7 @@ class AlbumListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text(title),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.AUDIO_MESSAGE,
+                    LightIcons.MEDIA,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })
@@ -314,7 +314,7 @@ class MixListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text("My Mixes"),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.AUDIO_MESSAGE,
+                    LightIcons.MEDIA,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })
