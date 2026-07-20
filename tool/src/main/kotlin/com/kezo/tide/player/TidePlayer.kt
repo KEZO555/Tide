@@ -2,6 +2,7 @@ package com.kezo.tide.player
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import kotlinx.coroutines.CoroutineScope
@@ -208,7 +209,17 @@ object TidePlayer {
 
         loadJob = scope.launch {
             // Prefer an offline download; only hit the network when there isn't one.
-            val url = Downloads.localPath(track.id) ?: try {
+            val local = Downloads.localPath(track.id)
+            val url = if (local != null) {
+                local
+            } else if (TidePrefs.offlineMode.value) {
+                // Offline mode: never stream — only downloaded tracks play.
+                if (gen == generation) {
+                    _isLoading.value = false
+                    _error.value = "Offline mode — not downloaded"
+                }
+                return@launch
+            } else try {
                 withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }
             } catch (e: Exception) {
                 if (gen == generation) {

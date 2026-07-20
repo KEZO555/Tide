@@ -998,6 +998,12 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         })
                     },
                 )
+                val offline by TidePrefs.offlineMode.collectAsState()
+                SettingsToggleRow(
+                    label = "Offline mode",
+                    checked = offline,
+                    onToggle = { TidePrefs.setOfflineMode(it) },
+                )
 
                 SectionLabel("Library")
                 SettingsNavRow(label = "Artists") { navigateTo({ ArtistListScreen(it) }) }

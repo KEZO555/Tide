@@ -2,6 +2,7 @@ package com.kezo.tide
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +24,7 @@ data class SectionPref(val id: String, val enabled: Boolean)
 object TidePrefs {
     private val KEY_HOME = stringPreferencesKey("homeSections")
     private val KEY_NAV = stringPreferencesKey("navTabs")
+    private val KEY_OFFLINE = booleanPreferencesKey("offlineMode")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val DEFAULT_HOME = listOf(
@@ -51,6 +53,9 @@ object TidePrefs {
     private val _navTabs = MutableStateFlow(DEFAULT_NAV)
     val navTabs: StateFlow<List<SectionPref>> = _navTabs.asStateFlow()
 
+    private val _offlineMode = MutableStateFlow(false)
+    val offlineMode: StateFlow<Boolean> = _offlineMode.asStateFlow()
+
     fun init(dataStore: DataStore<Preferences>) {
         if (store != null) return
         store = dataStore
@@ -59,8 +64,20 @@ object TidePrefs {
                 val p = dataStore.data.first()
                 p[KEY_HOME]?.let { _homeSections.value = decode(it, DEFAULT_HOME) }
                 p[KEY_NAV]?.let { _navTabs.value = decode(it, DEFAULT_NAV) }
+                p[KEY_OFFLINE]?.let { _offlineMode.value = it }
             } catch (_: Exception) {
                 // defaults are fine
+            }
+        }
+    }
+
+    fun setOfflineMode(enabled: Boolean) {
+        _offlineMode.value = enabled
+        scope.launch {
+            try {
+                store?.edit { it[KEY_OFFLINE] = enabled }
+            } catch (_: Exception) {
+                // best-effort
             }
         }
     }
