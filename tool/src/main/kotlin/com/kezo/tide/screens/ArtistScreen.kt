@@ -48,7 +48,8 @@ class ArtistViewModel(private val artist: Artist) : LightViewModel<Unit>() {
         load()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                favorite.value = Tidal.favoriteArtists().any { it.id == artist.id }
+                Tidal.ensureFavIds()
+                favorite.value = artist.id in Tidal.favArtistIds
             } catch (_: Exception) {
                 // leave unknown; toggle will still work optimistically
             }

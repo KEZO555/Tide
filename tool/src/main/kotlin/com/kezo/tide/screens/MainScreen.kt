@@ -55,7 +55,7 @@ import com.kezo.tide.ui.SectionLabel
 import com.kezo.tide.ui.SettingsNavRow
 import com.kezo.tide.ui.SettingsToggleRow
 import com.kezo.tide.ui.ShowAllRow
-import com.kezo.tide.ui.SortReverseRow
+import com.kezo.tide.ui.SortDropdown
 import com.kezo.tide.ui.TabBar
 import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
@@ -87,6 +87,42 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
+
+/** Library sort options. TIDAL favorites come back newest-first ("Recently Added"). */
+enum class SortMode(val label: String) {
+    RECENT("Recently Added"),
+    TITLE("Title A–Z"),
+    ARTIST("Artist A–Z"),
+}
+
+/** Sort options offered for track lists and album lists (all three modes). */
+private val FULL_SORTS = listOf(SortMode.RECENT, SortMode.TITLE, SortMode.ARTIST)
+
+/** Playlists have no single artist, so only these two. */
+private val PLAYLIST_SORTS = listOf(SortMode.RECENT, SortMode.TITLE)
+
+private fun sortTracks(list: List<Track>, mode: SortMode): List<Track> = when (mode) {
+    SortMode.RECENT -> list
+    SortMode.TITLE -> list.sortedBy { it.title.lowercase() }
+    SortMode.ARTIST -> list.sortedBy { it.artist.lowercase() + " " + it.title.lowercase() }
+}
+
+private fun sortAlbums(
+    list: List<com.kezo.tide.api.Album>,
+    mode: SortMode,
+): List<com.kezo.tide.api.Album> = when (mode) {
+    SortMode.RECENT -> list
+    SortMode.TITLE -> list.sortedBy { it.title.lowercase() }
+    SortMode.ARTIST -> list.sortedBy { it.artist.lowercase() + " " + it.title.lowercase() }
+}
+
+private fun sortPlaylists(
+    list: List<com.kezo.tide.api.Playlist>,
+    mode: SortMode,
+): List<com.kezo.tide.api.Playlist> = when (mode) {
+    SortMode.TITLE -> list.sortedBy { it.title.lowercase() }
+    else -> list
+}
 
 enum class MainTab { Home, Liked, Albums, Playlists, Search, Settings }
 
@@ -131,9 +167,9 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     val albums = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
     val playlists = MutableStateFlow<UiState<List<com.kezo.tide.api.Playlist>>>(UiState.Loading)
 
-    val likedReversed = MutableStateFlow(false)
-    val albumsReversed = MutableStateFlow(false)
-    val playlistsReversed = MutableStateFlow(false)
+    val likedSort = MutableStateFlow(SortMode.RECENT)
+    val albumsSort = MutableStateFlow(SortMode.RECENT)
+    val playlistsSort = MutableStateFlow(SortMode.RECENT)
 
     val searchMode = MutableStateFlow<SearchMode>(SearchMode.Input)
     var searchSession = 0
@@ -452,7 +488,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         LightTopBar(
             center = LightTopBarCenter.Text(title),
             rightButton = LightBarButton.LightIcon(
-                LightIcons.MEDIA,
+                LightIcons.AUDIO_MESSAGE,
                 onClick = {
                     if (PlayerPresence.openCount > 0) goBack()
                     else navigateTo({ a -> PlayerScreen(a) })
@@ -611,7 +647,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.LikedTab() {
         val state by viewModel.liked.collectAsState()
-        val reversed by viewModel.likedReversed.collectAsState()
+        val sort by viewModel.likedSort.collectAsState()
         val current by TidePlayer.current.collectAsState()
         TabHeader("Liked Songs")
         when (val s = state) {
@@ -621,10 +657,12 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No liked songs yet")
                 } else {
-                    val list = if (reversed) s.value.asReversed() else s.value
-                    SortReverseRow(reversed) {
-                        viewModel.likedReversed.value = !reversed
-                    }
+                    val list = remember(s.value, sort) { sortTracks(s.value, sort) }
+                    SortDropdown(
+                        options = FULL_SORTS.map { it.label },
+                        selectedIndex = FULL_SORTS.indexOf(sort),
+                        onSelect = { viewModel.likedSort.value = FULL_SORTS[it] },
+                    )
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
@@ -653,7 +691,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.AlbumsTab() {
         val state by viewModel.albums.collectAsState()
-        val reversed by viewModel.albumsReversed.collectAsState()
+        val sort by viewModel.albumsSort.collectAsState()
         TabHeader("Albums")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -662,10 +700,12 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No saved albums yet")
                 } else {
-                    val list = if (reversed) s.value.asReversed() else s.value
-                    SortReverseRow(reversed) {
-                        viewModel.albumsReversed.value = !reversed
-                    }
+                    val list = remember(s.value, sort) { sortAlbums(s.value, sort) }
+                    SortDropdown(
+                        options = FULL_SORTS.map { it.label },
+                        selectedIndex = FULL_SORTS.indexOf(sort),
+                        onSelect = { viewModel.albumsSort.value = FULL_SORTS[it] },
+                    )
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
@@ -697,7 +737,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.PlaylistsTab() {
         val state by viewModel.playlists.collectAsState()
-        val reversed by viewModel.playlistsReversed.collectAsState()
+        val sort by viewModel.playlistsSort.collectAsState()
         TabHeader("Playlists")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -706,10 +746,12 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No playlists yet")
                 } else {
-                    val list = if (reversed) s.value.asReversed() else s.value
-                    SortReverseRow(reversed) {
-                        viewModel.playlistsReversed.value = !reversed
-                    }
+                    val list = remember(s.value, sort) { sortPlaylists(s.value, sort) }
+                    SortDropdown(
+                        options = PLAYLIST_SORTS.map { it.label },
+                        selectedIndex = PLAYLIST_SORTS.indexOf(sort).coerceAtLeast(0),
+                        onSelect = { viewModel.playlistsSort.value = PLAYLIST_SORTS[it] },
+                    )
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
@@ -721,9 +763,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                 secondary = "${playlist.numberOfTracks} tracks",
                                 onClick = {
                                     navigateTo({
-                                        TrackListScreen(it, playlist.title) {
-                                            Tidal.playlistTracks(playlist.uuid)
-                                        }
+                                        TrackListScreen(
+                                            it, playlist.title,
+                                            shuffleable = true,
+                                        ) { Tidal.playlistTracks(playlist.uuid) }
                                     })
                                 },
                             )
@@ -888,9 +931,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         secondary = "${playlist.numberOfTracks} tracks",
                         onClick = {
                             navigateTo({
-                                TrackListScreen(it, playlist.title) {
-                                    Tidal.playlistTracks(playlist.uuid)
-                                }
+                                TrackListScreen(
+                                    it, playlist.title,
+                                    shuffleable = true,
+                                ) { Tidal.playlistTracks(playlist.uuid) }
                             })
                         },
                     )

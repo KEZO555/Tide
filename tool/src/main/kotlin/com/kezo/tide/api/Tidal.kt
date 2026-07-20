@@ -161,6 +161,8 @@ object Tidal {
         refreshToken = null
         userId = 0L
         favTrackIds.clear()
+        favAlbumIds.clear()
+        favArtistIds.clear()
         favIdsLoaded = false
         albumTracksCache.clear()
         artistTopTracksCache.clear()
@@ -512,20 +514,35 @@ object Tidal {
     // ---------- favorites (write) ----------
 
     val favTrackIds = LinkedHashSet<Long>()
+    val favAlbumIds = LinkedHashSet<Long>()
+    val favArtistIds = LinkedHashSet<Long>()
     private var favIdsLoaded = false
 
-    suspend fun ensureFavTrackIds() {
+    /**
+     * Loads all favorite id sets (tracks, albums, artists) in a single request.
+     * Cached for the session so membership checks on the artist and album pages
+     * don't each re-page the full favorites lists.
+     */
+    suspend fun ensureFavIds() {
         if (favIdsLoaded) return
         try {
             val ids = apiObject("users/$userId/favorites/ids")
-            ids.arr("TRACK").forEach { el ->
-                (el as? JsonPrimitive)?.content?.toLongOrNull()?.let(favTrackIds::add)
+            fun collect(key: String, into: LinkedHashSet<Long>) {
+                ids.arr(key).forEach { el ->
+                    (el as? JsonPrimitive)?.content?.toLongOrNull()?.let(into::add)
+                }
             }
+            collect("TRACK", favTrackIds)
+            collect("ALBUM", favAlbumIds)
+            collect("ARTIST", favArtistIds)
             favIdsLoaded = true
         } catch (_: Exception) {
             // favorite state stays unknown until this succeeds
         }
     }
+
+    /** Kept for existing callers; loads every favorite id set. */
+    suspend fun ensureFavTrackIds() = ensureFavIds()
 
     suspend fun addFavoriteTrack(id: Long) {
         api("users/$userId/favorites/tracks", method = HttpMethod.Post, form = mapOf("trackIds" to "$id"))
@@ -539,18 +556,22 @@ object Tidal {
 
     suspend fun addFavoriteAlbum(id: Long) {
         api("users/$userId/favorites/albums", method = HttpMethod.Post, form = mapOf("albumIds" to "$id"))
+        favAlbumIds.add(id)
     }
 
     suspend fun removeFavoriteAlbum(id: Long) {
         api("users/$userId/favorites/albums/$id", method = HttpMethod.Delete)
+        favAlbumIds.remove(id)
     }
 
     suspend fun addFavoriteArtist(id: Long) {
         api("users/$userId/favorites/artists", method = HttpMethod.Post, form = mapOf("artistIds" to "$id"))
+        favArtistIds.add(id)
     }
 
     suspend fun removeFavoriteArtist(id: Long) {
         api("users/$userId/favorites/artists/$id", method = HttpMethod.Delete)
+        favArtistIds.remove(id)
     }
 
     suspend fun addFavoritePlaylist(uuid: String) {

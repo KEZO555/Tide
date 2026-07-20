@@ -1,9 +1,13 @@
 package com.kezo.tide.screens
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Album
@@ -25,10 +29,15 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
+import com.thelightphone.sdk.ui.LightText
+import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.gridUnitsAsDp
+import com.thelightphone.sdk.ui.lightClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -68,7 +77,8 @@ class TrackListViewModel(
         if (albumId != 0L) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    albumFav.value = Tidal.favoriteAlbums().any { it.id == albumId }
+                    Tidal.ensureFavIds()
+                    albumFav.value = albumId in Tidal.favAlbumIds
                 } catch (_: Exception) {
                     // toggle still works optimistically
                 }
@@ -108,6 +118,7 @@ class TrackListScreen(
     private val title: String,
     private val numbered: Boolean = false,
     private val albumId: Long = 0L,
+    private val shuffleable: Boolean = false,
     private val loader: suspend () -> List<Track>,
 ) : LightScreen<Unit, TrackListViewModel>(sealedActivity) {
 
@@ -115,6 +126,9 @@ class TrackListScreen(
         get() = TrackListViewModel::class.java
 
     override fun createViewModel() = TrackListViewModel(loader, albumId)
+
+    /** Albums and playlists get top-of-list Play (and playlists, Shuffle). */
+    private val playable: Boolean get() = albumId != 0L || shuffleable
 
     @Composable
     override fun Content() {
@@ -134,7 +148,7 @@ class TrackListScreen(
                     )
                 } else {
                     LightBarButton.LightIcon(
-                        LightIcons.MEDIA,
+                        LightIcons.AUDIO_MESSAGE,
                         onClick = {
                             if (PlayerPresence.openCount > 0) goBack()
                             else navigateTo({ a -> PlayerScreen(a) })
@@ -149,6 +163,9 @@ class TrackListScreen(
                     if (s.value.isEmpty()) {
                         EmptyText("Nothing here yet")
                     } else {
+                        if (playable) {
+                            PlayHeader(tracks = s.value, showShuffle = shuffleable)
+                        }
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             uniformItemHeightGridUnits = ROW_UNITS,
@@ -174,6 +191,51 @@ class TrackListScreen(
             }
         }
     }
+
+    /** Play / Shuffle actions above an album or playlist. */
+    @Composable
+    private fun PlayHeader(tracks: List<Track>, showShuffle: Boolean) {
+        fun openPlayer() {
+            if (PlayerPresence.openCount > 0) goBack()
+            else navigateTo({ a -> PlayerScreen(a) })
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 1f.gridUnitsAsDp(),
+                    vertical = 0.5f.gridUnitsAsDp(),
+                ),
+            horizontalArrangement = Arrangement.spacedBy(2.5f.gridUnitsAsDp()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlayAction(icon = LightIcons.PLAY, label = "Play") {
+                TidePlayer.playInOrder(tracks)
+                openPlayer()
+            }
+            if (showShuffle) {
+                PlayAction(icon = LightIcons.SHUFFLE, label = "Shuffle") {
+                    TidePlayer.playShuffled(tracks)
+                    openPlayer()
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PlayAction(
+        icon: com.thelightphone.sdk.ui.LightIconConfiguration,
+        label: String,
+        onClick: () -> Unit,
+    ) {
+        Row(
+            modifier = Modifier.lightClickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LightIcon(icon = icon, size = 1.6f, modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()))
+            LightText(text = label, variant = LightTextVariant.Copy)
+        }
+    }
 }
 
 /** The user's favorite artists (reached from Settings, echo-style). */
@@ -195,7 +257,7 @@ class ArtistListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text("Artists"),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.MEDIA,
+                    LightIcons.AUDIO_MESSAGE,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })
@@ -251,7 +313,7 @@ class AlbumListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text(title),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.MEDIA,
+                    LightIcons.AUDIO_MESSAGE,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })
@@ -314,7 +376,7 @@ class MixListScreen(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                 center = LightTopBarCenter.Text("My Mixes"),
                 rightButton = LightBarButton.LightIcon(
-                    LightIcons.MEDIA,
+                    LightIcons.AUDIO_MESSAGE,
                     onClick = {
                         if (PlayerPresence.openCount > 0) goBack()
                         else navigateTo({ a -> PlayerScreen(a) })

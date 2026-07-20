@@ -119,6 +119,20 @@ object TidePlayer {
         startTrack(if (_shuffle.value) 0 else startIndex)
     }
 
+    /** Plays a list sequentially from the top (shuffle forced off). */
+    fun playInOrder(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _shuffle.value = false
+        play(tracks, 0)
+    }
+
+    /** Turns shuffle on and plays the list from a random starting track. */
+    fun playShuffled(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        _shuffle.value = true
+        play(tracks, tracks.indices.random())
+    }
+
     fun jumpTo(queueIndex: Int) {
         if (queueIndex in _queue.value.indices) startTrack(queueIndex)
     }

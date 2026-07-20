@@ -19,6 +19,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -222,35 +225,62 @@ fun TextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
 }
 
 /**
- * Right-aligned reverse-order control for library lists, using the LightOS
- * REVERSE_ORDER glyph. Underlines its label while reversed.
+ * Right-aligned sort control for library lists: shows the current option and
+ * expands into a LightOS-style list with a checkmark on the active choice.
  */
 @Composable
-fun SortReverseRow(reversed: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.3f.gridUnitsAsDp()),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+fun SortDropdown(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = options.getOrElse(selectedIndex) { options.firstOrNull() ?: "" }
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.lightClickable(onClick = onToggle),
+            modifier = Modifier
+                .fillMaxWidth()
+                .lightClickable { expanded = !expanded }
+                .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.3f.gridUnitsAsDp()),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LightIcon(
-                icon = LightIcons.REVERSE_ORDER,
-                size = 1.4f,
-                modifier = Modifier
-                    .alpha(if (reversed) 1f else 0.55f)
-                    .padding(end = 0.4f.gridUnitsAsDp()),
-            )
             LightText(
-                text = "Reverse",
+                text = "Sort: $current",
                 variant = LightTextVariant.Detail,
-                lighten = !reversed,
-                underline = reversed,
+                lighten = true,
             )
+            LightIcon(
+                icon = if (expanded) LightIcons.UP else LightIcons.DOWN,
+                size = 1.2f,
+                modifier = Modifier
+                    .padding(start = 0.4f.gridUnitsAsDp())
+                    .alpha(0.6f),
+            )
+        }
+        if (expanded) {
+            options.forEachIndexed { i, label ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .lightClickable {
+                            onSelect(i)
+                            expanded = false
+                        }
+                        .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.5f.gridUnitsAsDp()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    LightText(
+                        text = label,
+                        variant = LightTextVariant.Copy,
+                        underline = i == selectedIndex,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (i == selectedIndex) {
+                        LightIcon(icon = LightIcons.ACCEPT, size = 1.5f)
+                    }
+                }
+            }
         }
     }
 }
