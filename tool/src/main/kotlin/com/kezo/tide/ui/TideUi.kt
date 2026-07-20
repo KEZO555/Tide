@@ -236,13 +236,14 @@ fun SortDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val current = options.getOrElse(selectedIndex) { options.firstOrNull() ?: "" }
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.End,
+    ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
                 .lightClickable { expanded = !expanded }
-                .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.3f.gridUnitsAsDp()),
-            horizontalArrangement = Arrangement.End,
+                .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.35f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LightText(
@@ -252,7 +253,7 @@ fun SortDropdown(
             )
             LightIcon(
                 icon = if (expanded) LightIcons.UP else LightIcons.DOWN,
-                size = 1.2f,
+                size = 1.1f,
                 modifier = Modifier
                     .padding(start = 0.4f.gridUnitsAsDp())
                     .alpha(0.6f),
@@ -260,27 +261,21 @@ fun SortDropdown(
         }
         if (expanded) {
             options.forEachIndexed { i, label ->
-                Row(
+                LightText(
+                    text = label,
+                    variant = LightTextVariant.Detail,
+                    lighten = i != selectedIndex,
+                    underline = i == selectedIndex,
+                    align = TextAlign.End,
                     modifier = Modifier
-                        .fillMaxWidth()
                         .lightClickable {
                             onSelect(i)
                             expanded = false
                         }
-                        .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.5f.gridUnitsAsDp()),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    LightText(
-                        text = label,
-                        variant = LightTextVariant.Copy,
-                        underline = i == selectedIndex,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (i == selectedIndex) {
-                        LightIcon(icon = LightIcons.ACCEPT, size = 1.5f)
-                    }
-                }
+                        .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.35f.gridUnitsAsDp()),
+                )
             }
+            Spacer(modifier = Modifier.height(0.3f.gridUnitsAsDp()))
         }
     }
 }

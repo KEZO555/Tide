@@ -402,10 +402,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /**
-     * LightOS transport glyphs: previous · back-15s · play/pause · forward-15s
-     * · next. The 15-second skip glyphs match the Light podcast tool.
-     */
+    /** LightOS transport glyphs: rewind · play/pause · fast-forward. */
     @Composable
     private fun TransportControls(isPlaying: Boolean) {
         Row(
@@ -413,14 +410,11 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 top = 1.2f.gridUnitsAsDp(),
                 bottom = 1.3f.gridUnitsAsDp(),
             ),
-            horizontalArrangement = Arrangement.spacedBy(1.7f.gridUnitsAsDp()),
+            horizontalArrangement = Arrangement.spacedBy(3.6f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(modifier = Modifier.lightClickable { TidePlayer.previous() }) {
-                LightIcon(icon = LightIcons.REWIND, size = 1.9f)
-            }
-            Box(modifier = Modifier.lightClickable { TidePlayer.seekBy(-15_000) }) {
-                LightIcon(icon = LightIcons.SKIP_BACKWARD_FIFTEEN, size = 1.9f)
+                LightIcon(icon = LightIcons.REWIND, size = 2.2f)
             }
             Box(modifier = Modifier.lightClickable { TidePlayer.toggle() }) {
                 LightIcon(
@@ -428,11 +422,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                     size = 2.6f,
                 )
             }
-            Box(modifier = Modifier.lightClickable { TidePlayer.seekBy(15_000) }) {
-                LightIcon(icon = LightIcons.SKIP_FORWARD_FIFTEEN, size = 1.9f)
-            }
             Box(modifier = Modifier.lightClickable { TidePlayer.next() }) {
-                LightIcon(icon = LightIcons.FAST_FORWARD, size = 1.9f)
+                LightIcon(icon = LightIcons.FAST_FORWARD, size = 2.2f)
             }
         }
     }

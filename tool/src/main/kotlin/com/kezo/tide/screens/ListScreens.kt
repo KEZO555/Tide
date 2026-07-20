@@ -1,8 +1,12 @@
 package com.kezo.tide.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,6 +38,7 @@ import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
@@ -192,47 +197,63 @@ class TrackListScreen(
         }
     }
 
-    /** Play / Shuffle actions above an album or playlist. */
+    /** Play / Shuffle actions above an album or playlist, with a divider below. */
     @Composable
     private fun PlayHeader(tracks: List<Track>, showShuffle: Boolean) {
+        val colors = LightThemeTokens.colors
         fun openPlayer() {
             if (PlayerPresence.openCount > 0) goBack()
             else navigateTo({ a -> PlayerScreen(a) })
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 1f.gridUnitsAsDp(),
-                    vertical = 0.5f.gridUnitsAsDp(),
-                ),
-            horizontalArrangement = Arrangement.spacedBy(2.5f.gridUnitsAsDp()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PlayAction(icon = LightIcons.PLAY, label = "Play") {
-                TidePlayer.playInOrder(tracks)
-                openPlayer()
-            }
-            if (showShuffle) {
-                PlayAction(icon = LightIcons.SHUFFLE, label = "Shuffle") {
-                    TidePlayer.playShuffled(tracks)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(ROW_UNITS.gridUnitsAsDp()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PlayAction(
+                    modifier = Modifier.weight(1f),
+                    icon = LightIcons.PLAY,
+                    label = "Play",
+                ) {
+                    TidePlayer.playInOrder(tracks)
                     openPlayer()
                 }
+                if (showShuffle) {
+                    PlayAction(
+                        modifier = Modifier.weight(1f),
+                        icon = LightIcons.SHUFFLE,
+                        label = "Shuffle",
+                    ) {
+                        TidePlayer.playShuffled(tracks)
+                        openPlayer()
+                    }
+                }
             }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 1f.gridUnitsAsDp())
+                    .height(0.1f.gridUnitsAsDp())
+                    .background(colors.content.copy(alpha = 0.2f)),
+            )
         }
     }
 
     @Composable
     private fun PlayAction(
+        modifier: Modifier,
         icon: com.thelightphone.sdk.ui.LightIconConfiguration,
         label: String,
         onClick: () -> Unit,
     ) {
         Row(
-            modifier = Modifier.lightClickable(onClick = onClick),
+            modifier = modifier.lightClickable(onClick = onClick),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LightIcon(icon = icon, size = 1.6f, modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()))
+            LightIcon(icon = icon, size = 1.7f, modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()))
             LightText(text = label, variant = LightTextVariant.Copy)
         }
     }
