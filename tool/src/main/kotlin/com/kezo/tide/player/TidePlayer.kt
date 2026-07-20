@@ -273,6 +273,11 @@ object TidePlayer {
         seekTo((fraction.coerceIn(0f, 1f) * _durationMs.value).toInt())
     }
 
+    /** Seek relative to the current position (e.g. -15s / +15s), clamped. */
+    fun seekBy(deltaMs: Int) {
+        seekTo((_positionMs.value + deltaMs).coerceIn(0, _durationMs.value))
+    }
+
     private fun onTrackEnded() {
         when (_repeat.value) {
             RepeatMode.ONE -> startTrack(_index.value)

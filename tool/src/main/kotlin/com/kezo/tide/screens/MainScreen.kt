@@ -1,8 +1,10 @@
 package com.kezo.tide.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,11 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.viewModelScope
@@ -38,7 +42,6 @@ import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.player.Recents
 import com.kezo.tide.player.TidePlayer
-import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.HomeSectionHeader
@@ -52,6 +55,7 @@ import com.kezo.tide.ui.SectionLabel
 import com.kezo.tide.ui.SettingsNavRow
 import com.kezo.tide.ui.SettingsToggleRow
 import com.kezo.tide.ui.ShowAllRow
+import com.kezo.tide.ui.SortReverseRow
 import com.kezo.tide.ui.TabBar
 import com.kezo.tide.ui.TabIcon
 import com.kezo.tide.ui.TextButton
@@ -62,6 +66,7 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightScrollView
@@ -72,6 +77,7 @@ import com.thelightphone.sdk.ui.LightThemeController
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.lightClickable
 import com.thelightphone.sdk.ui.designVerticalPxToDp
 import com.thelightphone.sdk.ui.designVerticalPxToSp
 import com.thelightphone.sdk.ui.gridUnitsAsDp
@@ -124,6 +130,10 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     val liked = MutableStateFlow<UiState<List<Track>>>(UiState.Loading)
     val albums = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
     val playlists = MutableStateFlow<UiState<List<com.kezo.tide.api.Playlist>>>(UiState.Loading)
+
+    val likedReversed = MutableStateFlow(false)
+    val albumsReversed = MutableStateFlow(false)
+    val playlistsReversed = MutableStateFlow(false)
 
     val searchMode = MutableStateFlow<SearchMode>(SearchMode.Input)
     var searchSession = 0
@@ -601,6 +611,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.LikedTab() {
         val state by viewModel.liked.collectAsState()
+        val reversed by viewModel.likedReversed.collectAsState()
         val current by TidePlayer.current.collectAsState()
         TabHeader("Liked Songs")
         when (val s = state) {
@@ -610,18 +621,22 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No liked songs yet")
                 } else {
+                    val list = if (reversed) s.value.asReversed() else s.value
+                    SortReverseRow(reversed) {
+                        viewModel.likedReversed.value = !reversed
+                    }
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
                     ) {
-                        items(s.value.size) { i ->
-                            val track = s.value[i]
+                        items(list.size) { i ->
+                            val track = list[i]
                             NumberedTrackRow(
                                 number = null,
                                 track = track,
                                 active = current?.id == track.id,
                                 onClick = {
-                                    TidePlayer.play(s.value, i)
+                                    TidePlayer.play(list, i)
                                     navigateTo({ PlayerScreen(it) })
                                 },
                                 onLongClick = {
@@ -638,6 +653,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.AlbumsTab() {
         val state by viewModel.albums.collectAsState()
+        val reversed by viewModel.albumsReversed.collectAsState()
         TabHeader("Albums")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -646,12 +662,16 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No saved albums yet")
                 } else {
+                    val list = if (reversed) s.value.asReversed() else s.value
+                    SortReverseRow(reversed) {
+                        viewModel.albumsReversed.value = !reversed
+                    }
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
                     ) {
-                        items(s.value.size) { i ->
-                            val album = s.value[i]
+                        items(list.size) { i ->
+                            val album = list[i]
                             MediaRow(
                                 primary = album.title,
                                 secondary = listOf(album.artist, album.year)
@@ -677,6 +697,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     @Composable
     private fun ColumnScope.PlaylistsTab() {
         val state by viewModel.playlists.collectAsState()
+        val reversed by viewModel.playlistsReversed.collectAsState()
         TabHeader("Playlists")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -685,12 +706,16 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 if (s.value.isEmpty()) {
                     EmptyText("No playlists yet")
                 } else {
+                    val list = if (reversed) s.value.asReversed() else s.value
+                    SortReverseRow(reversed) {
+                        viewModel.playlistsReversed.value = !reversed
+                    }
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
                     ) {
-                        items(s.value.size) { i ->
-                            val playlist = s.value[i]
+                        items(list.size) { i ->
+                            val playlist = list[i]
                             MediaRow(
                                 primary = playlist.title,
                                 secondary = "${playlist.numberOfTracks} tracks",
@@ -722,26 +747,31 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 .fillMaxWidth()
                 .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 1f.gridUnitsAsDp()),
         ) {
-            LightText(text = "Search:", variant = LightTextVariant.Detail, lighten = true)
-            BasicTextField(
-                value = query,
-                onValueChange = { query = it },
-                // LightTextField value size (Copy), scaled for screen height the
-                // same way LightText scales its variants
-                textStyle = LightThemeTokens.typography.copy.copy(
-                    color = colors.content,
-                    fontSize = 30f.designVerticalPxToSp(),
-                    lineHeight = 45f.designVerticalPxToSp(),
-                ),
-                singleLine = true,
-                cursorBrush = SolidColor(colors.content),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(query) }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 0.5f.gridUnitsAsDp())
-                    .focusRequester(focusRequester),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LightIcon(
+                    icon = LightIcons.SEARCH,
+                    size = 1.6f,
+                    modifier = Modifier.padding(end = 0.6f.gridUnitsAsDp()),
+                )
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    // LightTextField value size (Copy), scaled for screen height the
+                    // same way LightText scales its variants
+                    textStyle = LightThemeTokens.typography.copy.copy(
+                        color = colors.content,
+                        fontSize = 30f.designVerticalPxToSp(),
+                        lineHeight = 45f.designVerticalPxToSp(),
+                    ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(colors.content),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(query) }),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                )
+            }
             Spacer(modifier = Modifier.height(0.5f.gridUnitsAsDp()))
             Spacer(
                 modifier = Modifier
@@ -941,7 +971,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
-    /** Full-screen confirm, Phono-style: title, message, confirm/cancel rows. */
+    /**
+     * Centered full-screen confirm in the LightOS modal style: a back button,
+     * the prompt centered, and large centered confirm/cancel choices.
+     */
     @Composable
     private fun ColumnScope.ConfirmContent(
         title: String,
@@ -950,22 +983,45 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         onConfirm: () -> Unit,
         onCancel: () -> Unit,
     ) {
-        TabHeader(title)
+        LightTopBar(
+            leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = onCancel),
+            center = LightTopBarCenter.Text(title),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 1f.gridUnitsAsDp()),
+                .padding(horizontal = 1.5f.gridUnitsAsDp()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Spacer(modifier = Modifier.height(1.5f.gridUnitsAsDp()))
             LightText(
                 text = message,
-                variant = LightTextVariant.Paragraph,
+                variant = LightTextVariant.Copy,
                 lighten = true,
+                align = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.height(1.5f.gridUnitsAsDp()))
-            ActionRow(text = confirmText, onClick = onConfirm)
-            ActionRow(text = "Cancel", onClick = onCancel)
+            Spacer(modifier = Modifier.height(2f.gridUnitsAsDp()))
+            LightText(
+                text = confirmText,
+                variant = LightTextVariant.Heading,
+                align = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .lightClickable(onClick = onConfirm)
+                    .padding(vertical = 0.6f.gridUnitsAsDp()),
+            )
+            LightText(
+                text = "Cancel",
+                variant = LightTextVariant.Heading,
+                lighten = true,
+                align = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .lightClickable(onClick = onCancel)
+                    .padding(vertical = 0.6f.gridUnitsAsDp()),
+            )
         }
     }
 }

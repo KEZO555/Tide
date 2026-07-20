@@ -221,6 +221,40 @@ fun TextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     )
 }
 
+/**
+ * Right-aligned reverse-order control for library lists, using the LightOS
+ * REVERSE_ORDER glyph. Underlines its label while reversed.
+ */
+@Composable
+fun SortReverseRow(reversed: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.3f.gridUnitsAsDp()),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier.lightClickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LightIcon(
+                icon = LightIcons.REVERSE_ORDER,
+                size = 1.4f,
+                modifier = Modifier
+                    .alpha(if (reversed) 1f else 0.55f)
+                    .padding(end = 0.4f.gridUnitsAsDp()),
+            )
+            LightText(
+                text = "Reverse",
+                variant = LightTextVariant.Detail,
+                lighten = !reversed,
+                underline = reversed,
+            )
+        }
+    }
+}
+
 /** Underlined "Show All" row under a capped home section. */
 @Composable
 fun ShowAllRow(onClick: () -> Unit) {
