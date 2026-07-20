@@ -126,6 +126,7 @@ fun NumberedTrackRow(
     track: Track,
     onClick: () -> Unit,
     active: Boolean = false,
+    downloaded: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     Row(
@@ -152,7 +153,7 @@ fun NumberedTrackRow(
             )
             Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
         }
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
             LightText(
                 text = track.title,
                 variant = LightTextVariant.Subheading,
@@ -174,7 +175,27 @@ fun NumberedTrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        if (downloaded) {
+            LightIcon(
+                icon = LightIcons.DOWNLOADED_ARROW,
+                size = 1.4f,
+                modifier = Modifier
+                    .padding(start = 0.5f.gridUnitsAsDp())
+                    .alpha(0.75f),
+            )
+        }
     }
+}
+
+/** Human-readable byte size, e.g. "42 MB". */
+fun formatBytes(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "${kb.toInt()} KB"
+    val mb = kb / 1024.0
+    if (mb < 1024) return "${(mb * 10).toInt() / 10.0} MB"
+    val gb = mb / 1024.0
+    return "${(gb * 10).toInt() / 10.0} GB"
 }
 
 /** Phono library media row: large title with a lighter secondary line. */

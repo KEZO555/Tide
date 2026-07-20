@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -14,6 +16,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.TideScreen
 import com.thelightphone.sdk.LightViewModel
@@ -81,6 +84,19 @@ class TrackOptionsScreen(
                 MenuOption("Add to Queue") {
                     TidePlayer.addToQueue(track)
                     goBack()
+                }
+                val downloadedIds by Downloads.downloadedIds.collectAsState()
+                val downloadingIds by Downloads.downloadingIds.collectAsState()
+                when {
+                    track.id in downloadedIds -> MenuOption("Remove Download") {
+                        Downloads.remove(track.id)
+                        goBack()
+                    }
+                    track.id in downloadingIds -> MenuOption("Downloading…") { goBack() }
+                    else -> MenuOption("Download") {
+                        Downloads.download(track)
+                        goBack()
+                    }
                 }
                 if (track.albumId != 0L) {
                     MenuOption("Go to Album") {

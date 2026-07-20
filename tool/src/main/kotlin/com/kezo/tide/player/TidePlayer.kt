@@ -207,7 +207,8 @@ object TidePlayer {
         Recents.record(track)
 
         loadJob = scope.launch {
-            val url = try {
+            // Prefer an offline download; only hit the network when there isn't one.
+            val url = Downloads.localPath(track.id) ?: try {
                 withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }
             } catch (e: Exception) {
                 if (gen == generation) {

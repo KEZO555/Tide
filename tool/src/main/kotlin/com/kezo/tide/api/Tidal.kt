@@ -6,8 +6,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -29,6 +31,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
+import java.io.File
 import java.io.IOException
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -608,5 +611,21 @@ object Tidal {
             (manifest.arr("urls").firstOrNull() as? JsonPrimitive)?.content?.let { return it }
         }
         throw IOException("no playable stream")
+    }
+
+    /**
+     * Downloads a track's audio to [file] for offline playback, at the currently
+     * configured quality. Returns the number of bytes written.
+     */
+    suspend fun downloadTrackTo(trackId: Long, file: File): Long {
+        val url = streamUrl(trackId)
+        val rsp = http.get(url)
+        if (!rsp.status.isSuccess()) {
+            throw IOException("download failed (${rsp.status.value})")
+        }
+        val bytes: ByteArray = rsp.body()
+        file.parentFile?.mkdirs()
+        file.writeBytes(bytes)
+        return file.length()
     }
 }

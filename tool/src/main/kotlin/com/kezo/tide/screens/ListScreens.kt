@@ -19,6 +19,7 @@ import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Mix
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
@@ -140,6 +141,7 @@ class TrackListScreen(
         val state by viewModel.state.collectAsState()
         val current by TidePlayer.current.collectAsState()
         val albumFav by viewModel.albumFav.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -181,6 +183,7 @@ class TrackListScreen(
                                     number = if (numbered) i + 1 else null,
                                     track = track,
                                     active = current?.id == track.id,
+                                    downloaded = track.id in downloadedIds,
                                     onClick = {
                                         TidePlayer.play(s.value, i)
                                         navigateTo({ PlayerScreen(it) })
@@ -197,10 +200,14 @@ class TrackListScreen(
         }
     }
 
-    /** Play / Shuffle actions above an album or playlist, with a divider below. */
+    /** Play / Shuffle / Download actions above an album or playlist. */
     @Composable
     private fun PlayHeader(tracks: List<Track>, showShuffle: Boolean) {
         val colors = LightThemeTokens.colors
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val allDownloaded = tracks.isNotEmpty() && tracks.all { it.id in downloadedIds }
+        val anyDownloading = tracks.any { it.id in downloadingIds }
         fun openPlayer() {
             if (PlayerPresence.openCount > 0) goBack()
             else navigateTo({ a -> PlayerScreen(a) })
@@ -228,6 +235,21 @@ class TrackListScreen(
                     ) {
                         TidePlayer.playShuffled(tracks)
                         openPlayer()
+                    }
+                }
+                PlayAction(
+                    modifier = Modifier.weight(1f),
+                    icon = if (allDownloaded) LightIcons.DOWNLOADED_ARROW else LightIcons.DOWNLOAD_ARROW,
+                    label = when {
+                        anyDownloading -> "Saving…"
+                        allDownloaded -> "Downloaded"
+                        else -> "Download"
+                    },
+                ) {
+                    when {
+                        anyDownloading -> Unit
+                        allDownloaded -> Downloads.removeThese(tracks)
+                        else -> Downloads.downloadAll(tracks)
                     }
                 }
             }

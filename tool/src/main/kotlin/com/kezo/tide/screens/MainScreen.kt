@@ -40,6 +40,7 @@ import com.kezo.tide.api.AuthPendingException
 import com.kezo.tide.api.SearchResults
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.Recents
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.EmptyText
@@ -144,7 +145,10 @@ fun tabIcon(id: String): TabIcon = when (id) {
     else -> TabIcon.Vector(Icons.Filled.Home)
 }
 
-class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() {
+class MainViewModel(
+    dataStore: DataStore<Preferences>,
+    filesDir: java.io.File,
+) : LightViewModel<Unit>() {
 
     sealed interface Session {
         data object Loading : Session
@@ -186,6 +190,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     init {
         Tidal.init(dataStore)
         Recents.init(dataStore)
+        Downloads.init(dataStore, filesDir)
         TidePrefs.init(dataStore)
         viewModelScope.launch {
             if (Tidal.restore()) {
@@ -333,6 +338,7 @@ class MainViewModel(dataStore: DataStore<Preferences>) : LightViewModel<Unit>() 
     fun signOut() {
         TidePlayer.stop()
         Recents.clear()
+        Downloads.clear()
         viewModelScope.launch {
             Tidal.logout()
             loadedTabs.clear()
@@ -369,7 +375,8 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<MainViewModel>
         get() = MainViewModel::class.java
 
-    override fun createViewModel() = MainViewModel(lightContext.dataStore)
+    override fun createViewModel() =
+        MainViewModel(lightContext.dataStore, lightContext.filesDir)
 
     @Composable
     override fun Content() {
@@ -649,6 +656,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val state by viewModel.liked.collectAsState()
         val sort by viewModel.likedSort.collectAsState()
         val current by TidePlayer.current.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
         TabHeader("Liked Songs")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -673,6 +681,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                 number = null,
                                 track = track,
                                 active = current?.id == track.id,
+                                downloaded = track.id in downloadedIds,
                                 onClick = {
                                     TidePlayer.play(list, i)
                                     navigateTo({ PlayerScreen(it) })
@@ -992,6 +1001,11 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
                 SectionLabel("Library")
                 SettingsNavRow(label = "Artists") { navigateTo({ ArtistListScreen(it) }) }
+                val downloads by Downloads.items.collectAsState()
+                SettingsNavRow(
+                    label = "Downloads",
+                    value = if (downloads.isEmpty()) null else "${downloads.size}",
+                ) { navigateTo({ DownloadsScreen(it) }) }
 
                 SectionLabel("Customize")
                 SettingsNavRow(label = "Home Sections") {
