@@ -1,9 +1,6 @@
 package com.kezo.tide.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,7 +36,6 @@ import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightLazyScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
-import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
@@ -170,13 +166,15 @@ class TrackListScreen(
                     if (s.value.isEmpty()) {
                         EmptyText("Nothing here yet")
                     } else {
-                        if (playable) {
-                            PlayHeader(tracks = s.value, showShuffle = shuffleable)
-                        }
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             uniformItemHeightGridUnits = ROW_UNITS,
                         ) {
+                            if (playable) {
+                                item {
+                                    PlayHeader(tracks = s.value, showShuffle = shuffleable)
+                                }
+                            }
                             items(s.value.size) { i ->
                                 val track = s.value[i]
                                 NumberedTrackRow(
@@ -200,10 +198,9 @@ class TrackListScreen(
         }
     }
 
-    /** Play / Shuffle / Download actions above an album or playlist. */
+    /** Play / Shuffle / Download actions at the top of an album or playlist. */
     @Composable
     private fun PlayHeader(tracks: List<Track>, showShuffle: Boolean) {
-        val colors = LightThemeTokens.colors
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
         val allDownloaded = tracks.isNotEmpty() && tracks.all { it.id in downloadedIds }
@@ -212,54 +209,45 @@ class TrackListScreen(
             if (PlayerPresence.openCount > 0) goBack()
             else navigateTo({ a -> PlayerScreen(a) })
         }
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(ROW_UNITS.gridUnitsAsDp()),
-                verticalAlignment = Alignment.CenterVertically,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ROW_UNITS.gridUnitsAsDp()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PlayAction(
+                modifier = Modifier.weight(1f),
+                icon = LightIcons.PLAY,
+                label = "Play",
             ) {
+                TidePlayer.playInOrder(tracks)
+                openPlayer()
+            }
+            if (showShuffle) {
                 PlayAction(
                     modifier = Modifier.weight(1f),
-                    icon = LightIcons.PLAY,
-                    label = "Play",
+                    icon = LightIcons.SHUFFLE,
+                    label = "Shuffle",
                 ) {
-                    TidePlayer.playInOrder(tracks)
+                    TidePlayer.playShuffled(tracks)
                     openPlayer()
                 }
-                if (showShuffle) {
-                    PlayAction(
-                        modifier = Modifier.weight(1f),
-                        icon = LightIcons.SHUFFLE,
-                        label = "Shuffle",
-                    ) {
-                        TidePlayer.playShuffled(tracks)
-                        openPlayer()
-                    }
-                }
-                PlayAction(
-                    modifier = Modifier.weight(1f),
-                    icon = if (allDownloaded) LightIcons.DOWNLOADED_ARROW else LightIcons.DOWNLOAD_ARROW,
-                    label = when {
-                        anyDownloading -> "Saving…"
-                        allDownloaded -> "Downloaded"
-                        else -> "Download"
-                    },
-                ) {
-                    when {
-                        anyDownloading -> Unit
-                        allDownloaded -> Downloads.removeThese(tracks)
-                        else -> Downloads.downloadAll(tracks)
-                    }
+            }
+            PlayAction(
+                modifier = Modifier.weight(1f),
+                icon = if (allDownloaded) LightIcons.DOWNLOADED_ARROW else LightIcons.DOWNLOAD_ARROW,
+                label = when {
+                    anyDownloading -> "Saving…"
+                    allDownloaded -> "Downloaded"
+                    else -> "Download"
+                },
+            ) {
+                when {
+                    anyDownloading -> Unit
+                    allDownloaded -> Downloads.removeThese(tracks)
+                    else -> Downloads.downloadAll(tracks)
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 1f.gridUnitsAsDp())
-                    .height(0.1f.gridUnitsAsDp())
-                    .background(colors.content.copy(alpha = 0.2f)),
-            )
         }
     }
 
@@ -275,8 +263,8 @@ class TrackListScreen(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            LightIcon(icon = icon, size = 1.7f, modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()))
-            LightText(text = label, variant = LightTextVariant.Copy)
+            LightIcon(icon = icon, size = 1.35f, modifier = Modifier.padding(end = 0.4f.gridUnitsAsDp()))
+            LightText(text = label, variant = LightTextVariant.Detail)
         }
     }
 }

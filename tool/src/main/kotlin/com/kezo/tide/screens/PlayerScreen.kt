@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -45,6 +46,7 @@ import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.RepeatMode
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
@@ -133,6 +135,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val playbackError by TidePlayer.error.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
         val volume by TidePlayer.volume.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
         var showVolume by remember { mutableStateOf(false) }
 
         LaunchedEffect(track?.id) {
@@ -282,6 +286,12 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         saved = favorite == true,
                         saveEnabled = favorite != null,
                         onSaveTap = { viewModel.toggleFavorite(t) },
+                        downloaded = t.id in downloadedIds,
+                        downloading = t.id in downloadingIds,
+                        onDownloadTap = {
+                            if (t.id in downloadedIds) Downloads.remove(t.id)
+                            else Downloads.download(t)
+                        },
                         onOpenQueue = { navigateTo({ a -> QueueScreen(a) }) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -435,6 +445,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         saved: Boolean,
         saveEnabled: Boolean,
         onSaveTap: () -> Unit,
+        downloaded: Boolean,
+        downloading: Boolean,
+        onDownloadTap: () -> Unit,
         onOpenQueue: () -> Unit,
         modifier: Modifier = Modifier,
     ) {
@@ -453,6 +466,11 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 enabled = saveEnabled,
                 onClick = onSaveTap,
             )
+            DownloadControl(
+                downloaded = downloaded,
+                downloading = downloading,
+                onClick = onDownloadTap,
+            )
             PlaybackModeIcon(
                 icon = LightIcons.LOOP,
                 active = repeatMode != RepeatMode.OFF,
@@ -462,6 +480,23 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             Box(modifier = Modifier.lightClickable(onClick = onOpenQueue)) {
                 LightIcon(icon = LightIcons.LIST, size = 1.9f)
             }
+        }
+    }
+
+    /** Bottom-bar download toggle for the current track. */
+    @Composable
+    private fun DownloadControl(downloaded: Boolean, downloading: Boolean, onClick: () -> Unit) {
+        Column(
+            modifier = Modifier.lightClickable(onClick = onClick),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            LightIcon(
+                icon = if (downloaded) LightIcons.DOWNLOADED_ARROW else LightIcons.DOWNLOAD_ARROW,
+                size = 1.9f,
+                modifier = Modifier.alpha(if (downloading) 0.4f else 1f),
+            )
+            Spacer(modifier = Modifier.height(0.25f.gridUnitsAsDp()))
+            Spacer(modifier = Modifier.height(0.13f.gridUnitsAsDp()))
         }
     }
 
