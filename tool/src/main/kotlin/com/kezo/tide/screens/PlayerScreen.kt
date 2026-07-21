@@ -138,10 +138,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val repeat by TidePlayer.repeat.collectAsState()
         val playbackError by TidePlayer.error.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
-        val volume by TidePlayer.volume.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
-        var showVolume by remember { mutableStateOf(false) }
 
         LaunchedEffect(track?.id) {
             track?.id?.let(viewModel::refreshFavorite)
@@ -151,18 +149,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
             val t = track
             LightTopBar(
                 leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                rightButton = if (t != null) {
-                    LightBarButton.LightIcon(
-                        if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER_ON,
-                        onClick = { showVolume = !showVolume },
-                    )
-                } else {
-                    null
-                },
             )
-            if (showVolume && t != null) {
-                VolumeLine(volume = volume, onSet = TidePlayer::setVolume)
-            }
 
             Column(
                 modifier = Modifier
@@ -187,11 +174,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         if (t != null) {
                             val showArt by TidePrefs.artworkNowPlaying.collectAsState()
                             if (showArt && t.albumCover.isNotBlank()) {
-                                // Keep the cover clear of the transport row; shrink
-                                // it further when the volume line is taking top space.
                                 AlbumArt(
                                     cover = t.albumCover,
-                                    sizeUnits = if (showVolume) 6.5f else 9.5f,
+                                    sizeUnits = 9.5f,
                                     modifier = Modifier.padding(bottom = 0.9f.gridUnitsAsDp()),
                                 )
                             }
@@ -317,62 +302,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 } else {
                     Spacer(modifier = Modifier.height(3.2f.gridUnitsAsDp()))
                 }
-            }
-        }
-    }
-
-    /**
-     * Quick in-app volume, styled like LightOS's Notifications sliders:
-     * speaker glyph at the line's left, thin track, thicker fill.
-     */
-    @Composable
-    private fun VolumeLine(volume: Float, onSet: (Float) -> Unit) {
-        val colors = LightThemeTokens.colors
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 1.5f.gridUnitsAsDp()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            LightIcon(
-                icon = if (volume == 0f) LightIcons.SPEAKER_MUTED else LightIcons.SPEAKER_ON,
-                size = 1.8f,
-            )
-            Spacer(modifier = Modifier.width(0.5f.gridUnitsAsDp()))
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 2f.gridUnitsAsDp())
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            down.consume()
-                            fun setAt(x: Float) {
-                                onSet((x / size.width).coerceIn(0f, 1f))
-                            }
-                            setAt(down.position.x)
-                            drag(down.id) { change ->
-                                change.consume()
-                                setAt(change.position.x)
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(0.13f.gridUnitsAsDp())
-                        .align(Alignment.Center)
-                        .background(colors.content),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(volume)
-                        .height(0.38f.gridUnitsAsDp())
-                        .align(Alignment.CenterStart)
-                        .background(colors.content),
-                )
             }
         }
     }
