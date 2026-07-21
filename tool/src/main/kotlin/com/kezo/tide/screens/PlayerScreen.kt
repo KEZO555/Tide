@@ -584,6 +584,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
         val queue by TidePlayer.queue.collectAsState()
         val index by TidePlayer.index.collectAsState()
         val positionMs by TidePlayer.positionMs.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -674,6 +675,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                                 number = null,
                                 track = queue[i],
                                 active = i == index,
+                                downloaded = queue[i].id in downloadedIds,
                                 onClick = { TidePlayer.jumpTo(i) },
                             )
                         }

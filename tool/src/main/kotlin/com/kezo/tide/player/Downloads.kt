@@ -22,6 +22,9 @@ import java.io.File
 @kotlinx.serialization.Serializable
 data class DownloadedTrack(val track: Track, val bytes: Long)
 
+/** Refuse to start a download when free space drops below this (~150 MB). */
+private const val MIN_FREE_BYTES = 150L * 1024 * 1024
+
 /**
  * Offline downloads. Audio files live in the tool's private files directory
  * (`filesDir/downloads/<trackId>`), and a manifest of what's downloaded is
@@ -70,6 +73,9 @@ object Downloads {
 
     private fun fileFor(trackId: Long): File? = dir?.let { File(it, "$trackId") }
 
+    /** Free space (bytes) on the downloads volume, or 0 if unknown. */
+    fun freeBytes(): Long = runCatching { dir?.usableSpace ?: 0L }.getOrDefault(0L)
+
     /**
      * Absolute path to a track's downloaded file, or null if not downloaded.
      * Guarded by the manifest so a partial/interrupted file is never played.
@@ -106,6 +112,8 @@ object Downloads {
 
     private suspend fun fetch(track: Track) {
         val file = fileFor(track.id) ?: return
+        // Don't try to download onto a nearly-full volume.
+        if (freeBytes() in 1 until MIN_FREE_BYTES) return
         setProgress(track.id, 0f)
         try {
             val bytes = Tidal.downloadTrackTo(track.id, file) { written, total ->

@@ -13,6 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,13 +81,17 @@ object TidePlayer {
     private var originalQueue: List<Track> = emptyList()
 
     init {
+        // Tick the position only while playing; when paused/stopped the collector
+        // suspends instead of waking every 500ms.
         scope.launch {
-            while (isActive) {
-                val p = player
-                if (p != null && prepared && _isPlaying.value) {
-                    runCatching { _positionMs.value = p.currentPosition }
+            _isPlaying.collectLatest { playing ->
+                while (playing && isActive) {
+                    val p = player
+                    if (p != null && prepared) {
+                        runCatching { _positionMs.value = p.currentPosition }
+                    }
+                    delay(500)
                 }
-                delay(500)
             }
         }
     }

@@ -54,12 +54,15 @@ class DownloadsScreen(sealedActivity: SealedLightActivity) :
             )
 
             val totalBytes = downloads.sumOf { it.bytes }
+            val free = Downloads.freeBytes()
             val summary = when {
-                downloads.isEmpty() && downloadingIds.isEmpty() -> "No downloads yet"
+                downloads.isEmpty() && downloadingIds.isEmpty() ->
+                    if (free > 0) "No downloads yet · ${formatBytes(free)} free" else "No downloads yet"
                 else -> buildString {
                     append("${downloads.size} ${if (downloads.size == 1) "song" else "songs"}")
                     append(" · ${formatBytes(totalBytes)}")
                     if (downloadingIds.isNotEmpty()) append(" · ${downloadingIds.size} downloading")
+                    if (free > 0) append(" · ${formatBytes(free)} free")
                 }
             }
             LightText(
