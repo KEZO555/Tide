@@ -258,7 +258,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                     }
 
                     if (t != null) {
-                        Spacer(modifier = Modifier.height(0.7f.gridUnitsAsDp()))
+                        Spacer(modifier = Modifier.height(0.4f.gridUnitsAsDp()))
                         ScrubProgress(positionMs = positionMs, durationMs = durationMs)
                         Row(
                             modifier = Modifier
@@ -278,7 +278,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         }
                         TransportControls(isPlaying = isPlaying)
                         if (hasArt) {
-                            Spacer(modifier = Modifier.height(1.2f.gridUnitsAsDp()))
+                            Spacer(modifier = Modifier.height(0.3f.gridUnitsAsDp()))
                         }
                     }
                 }
@@ -301,7 +301,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             .fillMaxWidth()
                             .padding(
                                 horizontal = 1.3f.gridUnitsAsDp(),
-                                vertical = 1.3f.gridUnitsAsDp(),
+                                vertical = 0.7f.gridUnitsAsDp(),
                             ),
                     )
                 } else {
@@ -365,8 +365,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
     private fun TransportControls(isPlaying: Boolean) {
         Row(
             modifier = Modifier.padding(
-                top = 0.8f.gridUnitsAsDp(),
-                bottom = 0.9f.gridUnitsAsDp(),
+                top = 0.5f.gridUnitsAsDp(),
+                bottom = 0.5f.gridUnitsAsDp(),
             ),
             horizontalArrangement = Arrangement.spacedBy(3.6f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
