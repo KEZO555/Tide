@@ -37,7 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -595,6 +597,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
         val index by TidePlayer.index.collectAsState()
         val positionMs by TidePlayer.positionMs.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val haptics = LocalHapticFeedback.current
 
         TideScreen {
             LightTopBar(
@@ -642,6 +645,7 @@ class QueueScreen(sealedActivity: SealedLightActivity) :
                                 .pointerInput(i) {
                                     detectDragGesturesAfterLongPress(
                                         onDragStart = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                             draggingIndex = i
                                             dragDy = 0f
                                             dragDx = 0f

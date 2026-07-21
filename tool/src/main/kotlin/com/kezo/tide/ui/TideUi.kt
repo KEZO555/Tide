@@ -28,6 +28,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.kezo.tide.TidePrefs
@@ -130,6 +132,7 @@ fun NumberedTrackRow(
     downloaded: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -137,8 +140,16 @@ fun NumberedTrackRow(
             .combinedClickable(
                 interactionSource = null,
                 indication = null,
-                onLongClick = onLongClick,
-                onClick = onClick,
+                onLongClick = onLongClick?.let {
+                    {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        it()
+                    }
+                },
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
             )
             .padding(horizontal = 1f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,

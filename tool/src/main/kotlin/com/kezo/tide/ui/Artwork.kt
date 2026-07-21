@@ -9,8 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -28,9 +26,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Loads TIDAL cover art (grayscale, to match the LightOS look) with a small
- * in-memory LRU plus a disk cache under the tool's files dir, so art also
- * shows for downloaded tracks offline once it's been seen.
+ * Loads TIDAL cover art (full color — the device renders it in grayscale when
+ * LightOS grayscale is on) with a small in-memory LRU plus a disk cache under
+ * the tool's files dir, so art also shows for downloaded tracks offline once
+ * it's been seen.
  */
 object Artwork {
     private const val MEM_CACHE = 80
@@ -96,8 +95,8 @@ object Artwork {
 }
 
 /**
- * Grayscale square album art. Shows a faint placeholder while loading or when
- * [cover] is blank, so rows stay aligned.
+ * Square album art. Shows a faint placeholder while loading or when [cover] is
+ * blank, so rows stay aligned.
  */
 @Composable
 fun AlbumArt(cover: String?, sizeUnits: Float, modifier: Modifier = Modifier) {
@@ -118,7 +117,6 @@ fun AlbumArt(cover: String?, sizeUnits: Float, modifier: Modifier = Modifier) {
                 bitmap = img,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                colorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }),
                 modifier = Modifier.size(dim),
             )
         }
