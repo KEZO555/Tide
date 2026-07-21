@@ -87,12 +87,16 @@ class TrackOptionsScreen(
                 }
                 val downloadedIds by Downloads.downloadedIds.collectAsState()
                 val downloadingIds by Downloads.downloadingIds.collectAsState()
+                val progress by Downloads.progress.collectAsState()
                 when {
                     track.id in downloadedIds -> MenuOption("Remove Download") {
                         Downloads.remove(track.id)
                         goBack()
                     }
-                    track.id in downloadingIds -> MenuOption("Downloading…") { goBack() }
+                    track.id in downloadingIds -> {
+                        val pct = ((progress[track.id] ?: 0f) * 100).toInt()
+                        MenuOption("Downloading… $pct%") { goBack() }
+                    }
                     else -> MenuOption("Download") {
                         Downloads.download(track)
                         goBack()

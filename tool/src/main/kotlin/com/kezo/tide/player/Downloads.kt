@@ -45,6 +45,10 @@ object Downloads {
     private val _downloadingIds = MutableStateFlow<Set<Long>>(emptySet())
     val downloadingIds: StateFlow<Set<Long>> = _downloadingIds.asStateFlow()
 
+    /** trackId -> download progress fraction (0..1) while downloading. */
+    private val _progress = MutableStateFlow<Map<Long, Float>>(emptyMap())
+    val progress: StateFlow<Map<Long, Float>> = _progress.asStateFlow()
+
     fun init(dataStore: DataStore<Preferences>, filesDir: File) {
         if (store != null) return
         store = dataStore
@@ -102,15 +106,31 @@ object Downloads {
 
     private suspend fun fetch(track: Track) {
         val file = fileFor(track.id) ?: return
+        setProgress(track.id, 0f)
         try {
-            val bytes = Tidal.downloadTrackTo(track.id, file)
+            val bytes = Tidal.downloadTrackTo(track.id, file) { written, total ->
+                if (total > 0) setProgress(track.id, (written.toFloat() / total).coerceIn(0f, 1f))
+            }
             _items.value = _items.value.filter { it.track.id != track.id } +
                 DownloadedTrack(track, bytes)
             _downloadedIds.value = _downloadedIds.value + track.id
             persist()
         } catch (_: Exception) {
             runCatching { file.delete() }
+        } finally {
+            clearProgress(track.id)
         }
+    }
+
+    /** Updates progress, but only on ~1% steps to avoid churning the flow. */
+    private fun setProgress(id: Long, fraction: Float) {
+        val current = _progress.value[id]
+        if (current != null && fraction < 1f && kotlin.math.abs(current - fraction) < 0.01f) return
+        _progress.value = _progress.value + (id to fraction)
+    }
+
+    private fun clearProgress(id: Long) {
+        if (id in _progress.value) _progress.value = _progress.value - id
     }
 
     fun remove(trackId: Long) {
@@ -138,6 +158,7 @@ object Downloads {
             _items.value.forEach { runCatching { fileFor(it.track.id)?.delete() } }
             _items.value = emptyList()
             _downloadedIds.value = emptySet()
+            _progress.value = emptyMap()
             persist()
         }
     }

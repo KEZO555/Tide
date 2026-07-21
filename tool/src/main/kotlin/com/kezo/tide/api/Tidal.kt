@@ -6,20 +6,22 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.forms.FormDataContent
-import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
+import io.ktor.http.contentLength
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -34,6 +36,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.io.readByteArray
 import java.io.File
 import java.io.IOException
 import java.util.Base64
@@ -635,17 +638,38 @@ object Tidal {
 
     /**
      * Downloads a track's audio to [file] for offline playback, at the currently
-     * configured quality. Returns the number of bytes written.
+     * configured quality. Streams to disk (no whole-file buffer) and reports
+     * progress as (bytesWritten, totalBytes; totalBytes <= 0 if unknown).
+     * Returns the number of bytes written.
      */
-    suspend fun downloadTrackTo(trackId: Long, file: File): Long {
+    suspend fun downloadTrackTo(
+        trackId: Long,
+        file: File,
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+    ): Long {
         val url = streamUrl(trackId)
-        val rsp = http.get(url)
-        if (!rsp.status.isSuccess()) {
-            throw IOException("download failed (${rsp.status.value})")
-        }
-        val bytes: ByteArray = rsp.body()
         file.parentFile?.mkdirs()
-        file.writeBytes(bytes)
-        return file.length()
+        var written = 0L
+        http.prepareGet(url).execute { response ->
+            if (!response.status.isSuccess()) {
+                throw IOException("download failed (${response.status.value})")
+            }
+            val total = response.contentLength() ?: -1L
+            val channel = response.bodyAsChannel()
+            file.outputStream().use { out ->
+                while (!channel.isClosedForRead) {
+                    val packet = channel.readRemaining(DOWNLOAD_CHUNK)
+                    while (!packet.exhausted()) {
+                        val chunk = packet.readByteArray()
+                        out.write(chunk)
+                        written += chunk.size
+                        onProgress(written, total)
+                    }
+                }
+            }
+        }
+        return if (written > 0) written else file.length()
     }
 }
+
+private const val DOWNLOAD_CHUNK = 64L * 1024L
