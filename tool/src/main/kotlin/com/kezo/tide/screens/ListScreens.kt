@@ -21,6 +21,7 @@ import com.kezo.tide.TidePrefs
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.AlbumArt
+import com.kezo.tide.ui.rememberCover
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
@@ -170,23 +171,26 @@ class TrackListScreen(
                     if (s.value.isEmpty()) {
                         EmptyText("Nothing here yet")
                     } else {
-                        val headerCover = s.value.firstOrNull()?.albumCover ?: ""
+                        val headerCover = rememberCover(
+                            s.value.firstOrNull()?.albumCover ?: "",
+                            albumId,
+                        )
+                        if (albumId != 0L && thumbnails && headerCover.isNotBlank()) {
+                            // Pinned, full-width-centered album cover (a lazy-list
+                            // item would sit inside the scrollbar gutter, off-center).
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 0.6f.gridUnitsAsDp(), bottom = 0.4f.gridUnitsAsDp()),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AlbumArt(cover = headerCover, sizeUnits = 9f)
+                            }
+                        }
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             uniformItemHeightGridUnits = ROW_UNITS,
                         ) {
-                            if (albumId != 0L && thumbnails && headerCover.isNotBlank()) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 0.8f.gridUnitsAsDp()),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        AlbumArt(cover = headerCover, sizeUnits = 11f)
-                                    }
-                                }
-                            }
                             if (playable) {
                                 item {
                                     PlayHeader(tracks = s.value, showShuffle = shuffleable)

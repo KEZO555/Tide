@@ -134,7 +134,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val track by TidePlayer.current.collectAsState()
         val isPlaying by TidePlayer.isPlaying.collectAsState()
-        val isLoading by TidePlayer.isLoading.collectAsState()
         val positionMs by TidePlayer.positionMs.collectAsState()
         val durationMs by TidePlayer.durationMs.collectAsState()
         val shuffle by TidePlayer.shuffle.collectAsState()
@@ -188,7 +187,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         if (t != null) {
                             LightText(
                                 text = t.artist,
-                                variant = LightTextVariant.Copy,
+                                variant = LightTextVariant.Detail,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
@@ -208,7 +207,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             )
                             LightText(
                                 text = t.title,
-                                variant = LightTextVariant.Heading,
+                                variant = LightTextVariant.Subheading,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
@@ -230,11 +229,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                         }
                                     ),
                             )
-                            val statusLine = when {
-                                isLoading -> "Loading..."
-                                playbackError != null -> playbackError
-                                else -> null
-                            }
+                            val statusLine = playbackError
                             statusLine?.let {
                                 LightText(
                                     text = it,
@@ -283,7 +278,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         }
                         TransportControls(isPlaying = isPlaying)
                         if (hasArt) {
-                            Spacer(modifier = Modifier.weight(0.32f))
+                            Spacer(modifier = Modifier.height(1.2f.gridUnitsAsDp()))
                         }
                     }
                 }
