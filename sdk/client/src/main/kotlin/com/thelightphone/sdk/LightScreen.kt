@@ -43,6 +43,16 @@ abstract class SimpleLightScreen<ResultType>(sealedActivity: SealedLightActivity
         activity.navigateTo(screen, resultCallback)
     }
 
+    /**
+     * Like [navigateTo], but removes this screen from the back stack as it goes,
+     * so back from the new screen skips this one. For transient screens (menus,
+     * pickers) that forward to a real page.
+     */
+    fun <T> navigateReplacing(screenFactory: (SealedLightActivity) -> SimpleLightScreen<T>, resultCallback: ((T) -> Unit)? = null) {
+        val screen = screenFactory(SealedLightActivity(activity))
+        activity.navigateReplacing(screen, resultCallback)
+    }
+
     open fun goBack(result: ResultType? = null) {
         this.result = result
         activity.goBack()

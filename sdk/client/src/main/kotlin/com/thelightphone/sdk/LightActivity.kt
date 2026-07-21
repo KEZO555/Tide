@@ -50,6 +50,23 @@ class LightActivity internal constructor() : ComponentActivity() {
         currentScreen.value = entry
     }
 
+    /**
+     * Navigate forward while dropping the current screen from the back stack, so
+     * pressing back from the new screen returns to whatever preceded it. Used by
+     * transient screens (e.g. a long-press menu) that forward to a real page.
+     */
+    internal fun <T> navigateReplacing(screen: SimpleLightScreen<T>, resultCallback: ((T) -> Unit)? = null) {
+        currentScreen.value?.let {
+            it.screen.notifyWillHide()
+            it.screen.destroy()
+            backStack.removeAt(backStack.lastIndex)
+        }
+        val entry = BackStackEntry(screen, resultCallback)
+        backStack.add(entry)
+        screen.notifyWillShow()
+        currentScreen.value = entry
+    }
+
     internal fun goBack() {
         val current = currentScreen.value ?: return
         val popped = current.screen

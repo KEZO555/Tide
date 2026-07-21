@@ -133,7 +133,7 @@ class TrackOptionsScreen(
                 }
                 if (track.albumId != 0L) {
                     MenuOption("Go to Album") {
-                        navigateTo({
+                        navigateReplacing({
                             TrackListScreen(
                                 it, track.albumTitle.ifBlank { "Album" },
                                 numbered = true,
@@ -144,11 +144,11 @@ class TrackOptionsScreen(
                 }
                 if (track.artistId != 0L) {
                     MenuOption("Go to Artist") {
-                        navigateTo({ ArtistScreen(it, Artist(track.artistId, track.artist)) })
+                        navigateReplacing({ ArtistScreen(it, Artist(track.artistId, track.artist)) })
                     }
                 }
                 MenuOption("Track Radio") {
-                    navigateTo({
+                    navigateReplacing({
                         TrackListScreen(it, "Radio") { Tidal.trackRadio(track.id) }
                     })
                 }
