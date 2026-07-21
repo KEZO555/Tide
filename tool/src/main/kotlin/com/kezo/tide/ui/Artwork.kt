@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,6 +14,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import com.kezo.tide.api.Tidal
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import io.ktor.client.HttpClient
@@ -121,4 +123,41 @@ fun AlbumArt(cover: String?, sizeUnits: Float, modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/**
+ * Album art that fills whatever size [modifier] gives it (e.g. a weighted,
+ * square box), so it can flex with the available space instead of a fixed size.
+ */
+@Composable
+fun AlbumArtBox(cover: String?, modifier: Modifier = Modifier) {
+    val placeholder = LightThemeTokens.colors.content.copy(alpha = 0.08f)
+    val image by produceState<ImageBitmap?>(initialValue = null, cover) {
+        value = if (cover.isNullOrBlank()) null
+        else withContext(Dispatchers.IO) { Artwork.load(cover, 640) }
+    }
+    Box(modifier = modifier.background(placeholder)) {
+        val img = image
+        if (img != null) {
+            Image(
+                bitmap = img,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * Returns [cover] if present, otherwise resolves the album's cover by id (so
+ * tracks whose payload lacked a cover still show artwork). Cached in Tidal.
+ */
+@Composable
+fun rememberCover(cover: String, albumId: Long): String {
+    if (cover.isNotBlank() || albumId == 0L) return cover
+    val resolved by produceState(initialValue = "", albumId) {
+        value = withContext(Dispatchers.IO) { Tidal.albumCover(albumId) }
+    }
+    return resolved
 }

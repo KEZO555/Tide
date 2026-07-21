@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,6 +55,8 @@ import com.kezo.tide.player.RepeatMode
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.AlbumArt
+import com.kezo.tide.ui.AlbumArtBox
+import com.kezo.tide.ui.rememberCover
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.PlayerPresence
@@ -158,28 +161,31 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
+                val showArt by TidePrefs.artworkNowPlaying.collectAsState()
+                val cover = rememberCover(t?.albumCover ?: "", t?.albumId ?: 0L)
+                val hasArt = t != null && showArt && cover.isNotBlank()
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
+                    verticalArrangement = if (hasArt) Arrangement.Top else Arrangement.Center,
                 ) {
+                    if (hasArt) {
+                        Spacer(modifier = Modifier.height(0.4f.gridUnitsAsDp()))
+                        AlbumArtBox(
+                            cover = cover,
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f)
+                                .padding(bottom = 0.9f.gridUnitsAsDp()),
+                        )
+                    }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .fillMaxWidth(0.9f)
-                            .padding(bottom = 0.8f.gridUnitsAsDp()),
+                        modifier = Modifier.fillMaxWidth(0.9f),
                     ) {
                         if (t != null) {
-                            val showArt by TidePrefs.artworkNowPlaying.collectAsState()
-                            if (showArt && t.albumCover.isNotBlank()) {
-                                AlbumArt(
-                                    cover = t.albumCover,
-                                    sizeUnits = 9.5f,
-                                    modifier = Modifier.padding(bottom = 0.9f.gridUnitsAsDp()),
-                                )
-                            }
                             LightText(
                                 text = t.artist,
                                 variant = LightTextVariant.Copy,
@@ -257,6 +263,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                     }
 
                     if (t != null) {
+                        Spacer(modifier = Modifier.height(0.7f.gridUnitsAsDp()))
                         ScrubProgress(positionMs = positionMs, durationMs = durationMs)
                         Row(
                             modifier = Modifier
@@ -275,6 +282,9 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             )
                         }
                         TransportControls(isPlaying = isPlaying)
+                        if (hasArt) {
+                            Spacer(modifier = Modifier.weight(0.32f))
+                        }
                     }
                 }
 

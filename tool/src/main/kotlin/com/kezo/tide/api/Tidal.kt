@@ -190,6 +190,7 @@ object Tidal {
         albumTracksCache.clear()
         artistTopTracksCache.clear()
         artistAlbumsCache.clear()
+        albumCoverCache.clear()
         mixTracksCache.clear()
         similarArtistsCache.clear()
         mixesCache = null
@@ -424,11 +425,28 @@ object Tidal {
     private val albumTracksCache = ConcurrentHashMap<Long, List<Track>>()
     private val artistTopTracksCache = ConcurrentHashMap<Long, List<Track>>()
     private val artistAlbumsCache = ConcurrentHashMap<Long, List<Album>>()
+    private val albumCoverCache = ConcurrentHashMap<Long, String>()
 
     suspend fun albumTracks(albumId: Long): List<Track> =
         albumTracksCache[albumId] ?: paged("albums/$albumId/tracks")
             .mapNotNull(::parseTrack)
             .also { albumTracksCache[albumId] = it }
+
+    /**
+     * Resolves an album's cover UUID (cached). Used to fill in artwork for
+     * tracks that arrived from endpoints whose track payload omits the cover.
+     */
+    suspend fun albumCover(albumId: Long): String {
+        if (albumId == 0L) return ""
+        albumCoverCache[albumId]?.let { return it }
+        return try {
+            val cover = apiObject("albums/$albumId").str("cover") ?: ""
+            albumCoverCache[albumId] = cover
+            cover
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     suspend fun playlistTracks(uuid: String): List<Track> =
         paged("playlists/$uuid/tracks").mapNotNull(::parseTrack)

@@ -1,6 +1,7 @@
 package com.kezo.tide.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,8 +17,10 @@ import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Mix
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.TidePrefs
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.AlbumArt
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
@@ -138,6 +141,7 @@ class TrackListScreen(
         val current by TidePlayer.current.collectAsState()
         val albumFav by viewModel.albumFav.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -166,10 +170,23 @@ class TrackListScreen(
                     if (s.value.isEmpty()) {
                         EmptyText("Nothing here yet")
                     } else {
+                        val headerCover = s.value.firstOrNull()?.albumCover ?: ""
                         LightLazyScrollView(
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                             uniformItemHeightGridUnits = ROW_UNITS,
                         ) {
+                            if (albumId != 0L && thumbnails && headerCover.isNotBlank()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 0.8f.gridUnitsAsDp()),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        AlbumArt(cover = headerCover, sizeUnits = 11f)
+                                    }
+                                }
+                            }
                             if (playable) {
                                 item {
                                     PlayHeader(tracks = s.value, showShuffle = shuffleable)
