@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -30,7 +34,18 @@ import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 
-class TrackOptionsViewModel : LightViewModel<Unit>()
+class TrackOptionsViewModel : LightViewModel<Unit>() {
+    fun toggleLike(trackId: Long, currentlyLiked: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (currentlyLiked) Tidal.removeFavoriteTrack(trackId)
+                else Tidal.addFavoriteTrack(trackId)
+            } catch (_: Exception) {
+                // leave state as-is; user can retry
+            }
+        }
+    }
+}
 
 /**
  * Long-press options for a track, in the SDK's fullscreen-modal style:
@@ -84,6 +99,20 @@ class TrackOptionsScreen(
                 MenuOption("Add to Queue") {
                     TidePlayer.addToQueue(track)
                     goBack()
+                }
+                val liked by produceState<Boolean?>(initialValue = null, track.id) {
+                    try {
+                        Tidal.ensureFavIds()
+                        value = track.id in Tidal.favTrackIds
+                    } catch (_: Exception) {
+                        // like state stays unknown; option just won't show yet
+                    }
+                }
+                liked?.let { isLiked ->
+                    MenuOption(if (isLiked) "Remove from Library" else "Add to Library") {
+                        viewModel.toggleLike(track.id, isLiked)
+                        goBack()
+                    }
                 }
                 val downloadedIds by Downloads.downloadedIds.collectAsState()
                 val downloadingIds by Downloads.downloadingIds.collectAsState()

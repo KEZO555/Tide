@@ -1,7 +1,6 @@
 package com.kezo.tide.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -20,13 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -45,10 +38,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
-import com.kezo.tide.api.Track
 import com.kezo.tide.TidePrefs
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.RepeatMode
@@ -78,36 +69,9 @@ import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-class PlayerViewModel : LightViewModel<Unit>() {
-    /** null = unknown / loading */
-    val favorite = MutableStateFlow<Boolean?>(null)
-
-    fun refreshFavorite(trackId: Long) {
-        favorite.value = null
-        viewModelScope.launch(Dispatchers.IO) {
-            Tidal.ensureFavTrackIds()
-            favorite.value = trackId in Tidal.favTrackIds
-        }
-    }
-
-    fun toggleFavorite(track: Track) {
-        val currently = favorite.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                if (currently) Tidal.removeFavoriteTrack(track.id)
-                else Tidal.addFavoriteTrack(track.id)
-                favorite.value = !currently
-            } catch (_: Exception) {
-                // leave state as-is; user can retry
-            }
-        }
-    }
-}
+class PlayerViewModel : LightViewModel<Unit>()
 
 /**
  * Now Playing in the style of the Light podcast/music tools: back-only header,
@@ -139,13 +103,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
         val shuffle by TidePlayer.shuffle.collectAsState()
         val repeat by TidePlayer.repeat.collectAsState()
         val playbackError by TidePlayer.error.collectAsState()
-        val favorite by viewModel.favorite.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
-
-        LaunchedEffect(track?.id) {
-            track?.id?.let(viewModel::refreshFavorite)
-        }
 
         TideScreen {
             val t = track
@@ -290,9 +249,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                     SecondaryControls(
                         shuffleActive = shuffle,
                         repeatMode = repeat,
-                        saved = favorite == true,
-                        saveEnabled = favorite != null,
-                        onSaveTap = { viewModel.toggleFavorite(t) },
                         downloaded = t.id in downloadedIds,
                         downloading = t.id in downloadingIds,
                         onDownloadTap = {
@@ -393,9 +349,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
     private fun SecondaryControls(
         shuffleActive: Boolean,
         repeatMode: RepeatMode,
-        saved: Boolean,
-        saveEnabled: Boolean,
-        onSaveTap: () -> Unit,
         downloaded: Boolean,
         downloading: Boolean,
         onDownloadTap: () -> Unit,
@@ -411,11 +364,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 icon = LightIcons.SHUFFLE,
                 active = shuffleActive,
                 onClick = { TidePlayer.toggleShuffle() },
-            )
-            SaveControl(
-                saved = saved,
-                enabled = saveEnabled,
-                onClick = onSaveTap,
             )
             DownloadControl(
                 downloaded = downloaded,
@@ -446,37 +394,6 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                 size = 1.9f,
                 modifier = Modifier.alpha(if (downloading) 0.4f else 1f),
             )
-            Spacer(modifier = Modifier.height(0.25f.gridUnitsAsDp()))
-            Spacer(modifier = Modifier.height(0.13f.gridUnitsAsDp()))
-        }
-    }
-
-    /** Circle save control: outlined + to like, filled ✓ once liked. */
-    @Composable
-    private fun SaveControl(saved: Boolean, enabled: Boolean, onClick: () -> Unit) {
-        val colors = LightThemeTokens.colors
-        val circleSize = 1.9f.gridUnitsAsDp()
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(circleSize)
-                    .then(
-                        if (saved) {
-                            Modifier.background(colors.content, CircleShape)
-                        } else {
-                            Modifier.border(0.13f.gridUnitsAsDp(), colors.content, CircleShape)
-                        }
-                    )
-                    .lightClickable(enabled = enabled, onClick = onClick),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (saved) Icons.Filled.Check else Icons.Filled.Add,
-                    contentDescription = if (saved) "Unlike" else "Save to Liked Songs",
-                    tint = if (saved) colors.background else colors.content,
-                    modifier = Modifier.size(1.27f.gridUnitsAsDp()),
-                )
-            }
             Spacer(modifier = Modifier.height(0.25f.gridUnitsAsDp()))
             Spacer(modifier = Modifier.height(0.13f.gridUnitsAsDp()))
         }
