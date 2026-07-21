@@ -182,15 +182,17 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .fillMaxWidth(0.9f)
-                            .padding(bottom = 1.3f.gridUnitsAsDp()),
+                            .padding(bottom = 0.8f.gridUnitsAsDp()),
                     ) {
                         if (t != null) {
                             val showArt by TidePrefs.artworkNowPlaying.collectAsState()
                             if (showArt && t.albumCover.isNotBlank()) {
+                                // Keep the cover clear of the transport row; shrink
+                                // it further when the volume line is taking top space.
                                 AlbumArt(
                                     cover = t.albumCover,
-                                    sizeUnits = 10f,
-                                    modifier = Modifier.padding(bottom = 1.2f.gridUnitsAsDp()),
+                                    sizeUnits = if (showVolume) 5f else 7.5f,
+                                    modifier = Modifier.padding(bottom = 0.9f.gridUnitsAsDp()),
                                 )
                             }
                             LightText(
@@ -429,8 +431,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
     private fun TransportControls(isPlaying: Boolean) {
         Row(
             modifier = Modifier.padding(
-                top = 1.2f.gridUnitsAsDp(),
-                bottom = 1.3f.gridUnitsAsDp(),
+                top = 0.8f.gridUnitsAsDp(),
+                bottom = 0.9f.gridUnitsAsDp(),
             ),
             horizontalArrangement = Arrangement.spacedBy(3.6f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
