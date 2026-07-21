@@ -55,6 +55,8 @@ data class Track(
     val durationSec: Int,
     val explicit: Boolean,
     val quality: String,
+    /** TIDAL cover UUID of the track's album (empty if none). */
+    val albumCover: String = "",
 )
 
 data class Album(
@@ -64,6 +66,8 @@ data class Album(
     val numberOfTracks: Int,
     val year: String,
     val releaseDate: String = "",
+    /** TIDAL cover UUID (empty if none). */
+    val cover: String = "",
 )
 
 data class Artist(val id: Long, val name: String)
@@ -368,6 +372,7 @@ object Tidal {
             durationSec = t.int("duration") ?: 0,
             explicit = t.bool("explicit") ?: false,
             quality = t.str("audioQuality") ?: "",
+            albumCover = album?.str("cover") ?: "",
         )
     }
 
@@ -381,6 +386,7 @@ object Tidal {
             numberOfTracks = a.int("numberOfTracks") ?: 0,
             year = (a.str("releaseDate") ?: "").take(4),
             releaseDate = a.str("releaseDate") ?: "",
+            cover = a.str("cover") ?: "",
         )
     }
 

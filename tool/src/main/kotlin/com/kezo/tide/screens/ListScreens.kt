@@ -366,6 +366,7 @@ class AlbumListScreen(
                                 val album = s.value[i]
                                 MediaRow(
                                     primary = album.title,
+                                    cover = album.cover,
                                     secondary = listOf(album.artist, album.year)
                                         .filter { it.isNotBlank() }
                                         .joinToString(" · "),

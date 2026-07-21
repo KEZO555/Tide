@@ -43,6 +43,7 @@ import com.kezo.tide.api.Track
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.Recents
 import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.Artwork
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.HomeSectionHeader
@@ -191,6 +192,7 @@ class MainViewModel(
         Tidal.init(dataStore)
         Recents.init(dataStore)
         Downloads.init(dataStore, filesDir)
+        Artwork.init(filesDir)
         TidePrefs.init(dataStore)
         viewModelScope.launch {
             if (Tidal.restore()) {
@@ -626,6 +628,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 s.value.take(4).forEach { album ->
                     MediaRow(
                         primary = album.title,
+                        cover = album.cover,
                         secondary = listOf(album.artist, album.year)
                             .filter { it.isNotBlank() }
                             .joinToString(" · "),
@@ -723,6 +726,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                             val album = list[i]
                             MediaRow(
                                 primary = album.title,
+                                cover = album.cover,
                                 secondary = listOf(album.artist, album.year)
                                     .filter { it.isNotBlank() }
                                     .joinToString(" · "),
@@ -919,6 +923,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 results.albums.forEach { album ->
                     MediaRow(
                         primary = album.title,
+                        cover = album.cover,
                         secondary = listOf(album.artist, album.year)
                             .filter { it.isNotBlank() }
                             .joinToString(" · "),
@@ -1003,6 +1008,20 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     label = "Offline mode",
                     checked = offline,
                     onToggle = { TidePrefs.setOfflineMode(it) },
+                )
+
+                SectionLabel("Artwork")
+                val artPlayer by TidePrefs.artworkNowPlaying.collectAsState()
+                SettingsToggleRow(
+                    label = "Now Playing artwork",
+                    checked = artPlayer,
+                    onToggle = { TidePrefs.setArtworkNowPlaying(it) },
+                )
+                val artThumbs by TidePrefs.artworkThumbnails.collectAsState()
+                SettingsToggleRow(
+                    label = "List thumbnails",
+                    checked = artThumbs,
+                    onToggle = { TidePrefs.setArtworkThumbnails(it) },
                 )
 
                 SectionLabel("Library")

@@ -46,10 +46,12 @@ import androidx.lifecycle.viewModelScope
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.TidePrefs
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.RepeatMode
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ActionRow
+import com.kezo.tide.ui.AlbumArt
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.NumberedTrackRow
 import com.kezo.tide.ui.PlayerPresence
@@ -181,6 +183,14 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             .padding(bottom = 1.3f.gridUnitsAsDp()),
                     ) {
                         if (t != null) {
+                            val showArt by TidePrefs.artworkNowPlaying.collectAsState()
+                            if (showArt && t.albumCover.isNotBlank()) {
+                                AlbumArt(
+                                    cover = t.albumCover,
+                                    sizeUnits = 10f,
+                                    modifier = Modifier.padding(bottom = 1.2f.gridUnitsAsDp()),
+                                )
+                            }
                             LightText(
                                 text = t.artist,
                                 variant = LightTextVariant.Copy,

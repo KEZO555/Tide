@@ -25,6 +25,8 @@ object TidePrefs {
     private val KEY_HOME = stringPreferencesKey("homeSections")
     private val KEY_NAV = stringPreferencesKey("navTabs")
     private val KEY_OFFLINE = booleanPreferencesKey("offlineMode")
+    private val KEY_ART_PLAYER = booleanPreferencesKey("artworkNowPlaying")
+    private val KEY_ART_THUMBS = booleanPreferencesKey("artworkThumbnails")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val DEFAULT_HOME = listOf(
@@ -56,6 +58,12 @@ object TidePrefs {
     private val _offlineMode = MutableStateFlow(false)
     val offlineMode: StateFlow<Boolean> = _offlineMode.asStateFlow()
 
+    private val _artworkNowPlaying = MutableStateFlow(false)
+    val artworkNowPlaying: StateFlow<Boolean> = _artworkNowPlaying.asStateFlow()
+
+    private val _artworkThumbnails = MutableStateFlow(false)
+    val artworkThumbnails: StateFlow<Boolean> = _artworkThumbnails.asStateFlow()
+
     fun init(dataStore: DataStore<Preferences>) {
         if (store != null) return
         store = dataStore
@@ -65,6 +73,8 @@ object TidePrefs {
                 p[KEY_HOME]?.let { _homeSections.value = decode(it, DEFAULT_HOME) }
                 p[KEY_NAV]?.let { _navTabs.value = decode(it, DEFAULT_NAV) }
                 p[KEY_OFFLINE]?.let { _offlineMode.value = it }
+                p[KEY_ART_PLAYER]?.let { _artworkNowPlaying.value = it }
+                p[KEY_ART_THUMBS]?.let { _artworkThumbnails.value = it }
             } catch (_: Exception) {
                 // defaults are fine
             }
@@ -76,6 +86,28 @@ object TidePrefs {
         scope.launch {
             try {
                 store?.edit { it[KEY_OFFLINE] = enabled }
+            } catch (_: Exception) {
+                // best-effort
+            }
+        }
+    }
+
+    fun setArtworkNowPlaying(enabled: Boolean) {
+        _artworkNowPlaying.value = enabled
+        scope.launch {
+            try {
+                store?.edit { it[KEY_ART_PLAYER] = enabled }
+            } catch (_: Exception) {
+                // best-effort
+            }
+        }
+    }
+
+    fun setArtworkThumbnails(enabled: Boolean) {
+        _artworkThumbnails.value = enabled
+        scope.launch {
+            try {
+                store?.edit { it[KEY_ART_THUMBS] = enabled }
             } catch (_: Exception) {
                 // best-effort
             }

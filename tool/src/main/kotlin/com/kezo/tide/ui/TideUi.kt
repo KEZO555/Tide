@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Track
 import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIconConfiguration
@@ -142,6 +143,15 @@ fun NumberedTrackRow(
             .padding(horizontal = 1f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
+        // Skip thumbnails in numbered (album) lists — every row shares one cover.
+        if (thumbnails && number == null && track.albumCover.isNotBlank()) {
+            AlbumArt(
+                cover = track.albumCover,
+                sizeUnits = 2.8f,
+                modifier = Modifier.padding(end = 0.65f.gridUnitsAsDp()),
+            )
+        }
         if (number != null) {
             LightText(
                 text = "$number.",
@@ -204,29 +214,43 @@ fun MediaRow(
     primary: String,
     secondary: String,
     onClick: () -> Unit,
+    cover: String? = null,
 ) {
-    Column(
+    val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(ROW_UNITS.gridUnitsAsDp())
             .lightClickable(onClick = onClick)
             .padding(horizontal = 1f.gridUnitsAsDp()),
-        verticalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        LightText(
-            text = primary,
-            variant = LightTextVariant.Subheading,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (secondary.isNotBlank()) {
+        if (thumbnails && !cover.isNullOrBlank()) {
+            AlbumArt(
+                cover = cover,
+                sizeUnits = 2.8f,
+                modifier = Modifier.padding(end = 0.65f.gridUnitsAsDp()),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center,
+        ) {
             LightText(
-                text = secondary,
-                variant = LightTextVariant.Detail,
-                lighten = true,
+                text = primary,
+                variant = LightTextVariant.Subheading,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (secondary.isNotBlank()) {
+                LightText(
+                    text = secondary,
+                    variant = LightTextVariant.Detail,
+                    lighten = true,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

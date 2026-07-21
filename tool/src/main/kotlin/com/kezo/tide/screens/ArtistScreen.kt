@@ -158,6 +158,7 @@ class ArtistScreen(
                         s.value.forEach { album ->
                             MediaRow(
                                 primary = album.title,
+                                cover = album.cover,
                                 secondary = album.year,
                                 onClick = {
                                     navigateTo({
