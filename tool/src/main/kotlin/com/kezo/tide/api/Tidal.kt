@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -23,6 +24,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -125,7 +128,17 @@ object Tidal {
     private val KEY_COUNTRY = stringPreferencesKey("countryCode")
     private val KEY_QUALITY = stringPreferencesKey("quality")
 
-    private val http = HttpClient(OkHttp)
+    private val http = HttpClient(OkHttp) {
+        install(HttpTimeout) {
+            // No total request cap so large downloads can run; fail fast on a
+            // dead connection or a stalled response instead of hanging forever.
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 30_000
+        }
+    }
+
+    /** Serializes token refresh so parallel 401s trigger only one refresh. */
+    private val refreshMutex = Mutex()
 
     private var store: DataStore<Preferences>? = null
 
@@ -239,8 +252,14 @@ object Tidal {
         }
     }
 
-    private suspend fun refreshAccessToken(): Boolean {
-        val rt = refreshToken ?: return false
+    /**
+     * Refreshes the access token. [staleToken] is the token the caller had when
+     * it got a 401; if another caller already refreshed while this one waited
+     * for the lock, we skip the network call and let the caller retry.
+     */
+    private suspend fun refreshAccessToken(staleToken: String?): Boolean = refreshMutex.withLock {
+        if (accessToken != null && accessToken != staleToken) return@withLock true
+        val rt = refreshToken ?: return@withLock false
         val rsp = http.post("$AUTH/token") {
             setBody(FormDataContent(Parameters.build {
                 append("client_id", CLIENT_ID)
@@ -250,10 +269,10 @@ object Tidal {
                 append("scope", SCOPE)
             }))
         }
-        if (!rsp.status.isSuccess()) return false
+        if (!rsp.status.isSuccess()) return@withLock false
         applyTokenResponse(json.parseToJsonElement(rsp.bodyAsText()) as JsonObject)
         persistTokens()
-        return true
+        true
     }
 
     private suspend fun loadSession() {
@@ -275,18 +294,19 @@ object Tidal {
         form: Map<String, String>? = null,
         retry: Boolean = true,
     ): String {
+        val used = accessToken
         val rsp = http.request("$API/$path") {
             this.method = method
             parameter("countryCode", countryCode)
             params.forEach { (k, v) -> parameter(k, v) }
-            header("Authorization", "Bearer ${accessToken ?: ""}")
+            header("Authorization", "Bearer ${used ?: ""}")
             if (form != null) {
                 setBody(FormDataContent(Parameters.build {
                     form.forEach { (k, v) -> append(k, v) }
                 }))
             }
         }
-        if (rsp.status.value == 401 && retry && refreshAccessToken()) {
+        if (rsp.status.value == 401 && retry && refreshAccessToken(used)) {
             return api(path, params, method, form, retry = false)
         }
         val text = rsp.bodyAsText()

@@ -34,6 +34,9 @@ object TidePlayer {
     private var generation = 0
     private var prepared = false
 
+    /** Consecutive load/playback failures, so auto-skip can't loop forever. */
+    private var consecutiveErrors = 0
+
     private val _queue = MutableStateFlow<List<Track>>(emptyList())
     val queue: StateFlow<List<Track>> = _queue.asStateFlow()
 
@@ -99,9 +102,7 @@ object TidePlayer {
         )
         p.setOnCompletionListener { onTrackEnded() }
         p.setOnErrorListener { _, _, _ ->
-            _error.value = "playback error"
-            _isPlaying.value = false
-            _isLoading.value = false
+            failTrack("playback error")
             true
         }
         player = p
@@ -110,6 +111,7 @@ object TidePlayer {
 
     fun play(tracks: List<Track>, startIndex: Int = 0) {
         if (tracks.isEmpty()) return
+        consecutiveErrors = 0
         originalQueue = tracks
         val ordered = if (_shuffle.value) {
             listOf(tracks[startIndex]) + (tracks - tracks[startIndex]).shuffled()
@@ -135,7 +137,10 @@ object TidePlayer {
     }
 
     fun jumpTo(queueIndex: Int) {
-        if (queueIndex in _queue.value.indices) startTrack(queueIndex)
+        if (queueIndex in _queue.value.indices) {
+            consecutiveErrors = 0
+            startTrack(queueIndex)
+        }
     }
 
     /** Appends a track to the end of the queue (starts playback when idle). */
@@ -213,19 +218,13 @@ object TidePlayer {
             val url = if (local != null) {
                 local
             } else if (TidePrefs.offlineMode.value) {
-                // Offline mode: never stream — only downloaded tracks play.
-                if (gen == generation) {
-                    _isLoading.value = false
-                    _error.value = "Offline mode — not downloaded"
-                }
+                // Offline mode: never stream — skip toward a downloaded track.
+                if (gen == generation) failTrack("Offline mode — not downloaded")
                 return@launch
             } else try {
                 withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }
             } catch (e: Exception) {
-                if (gen == generation) {
-                    _isLoading.value = false
-                    _error.value = e.message ?: "couldn't load track"
-                }
+                if (gen == generation) failTrack(e.message ?: "couldn't load track")
                 return@launch
             }
             if (gen != generation) return@launch
@@ -236,6 +235,7 @@ object TidePlayer {
                 p.setOnPreparedListener {
                     if (gen != generation) return@setOnPreparedListener
                     prepared = true
+                    consecutiveErrors = 0
                     _durationMs.value = if (it.duration > 0) it.duration else track.durationSec * 1000
                     it.setVolume(_volume.value, _volume.value)
                     it.start()
@@ -244,9 +244,26 @@ object TidePlayer {
                 }
                 p.prepareAsync()
             }.onFailure {
-                _isLoading.value = false
-                _error.value = "couldn't start playback"
+                if (gen == generation) failTrack("couldn't start playback")
             }
+        }
+    }
+
+    /**
+     * A track failed to load or play. Skip to the next one so a single bad
+     * track (region-locked, transient error, or not downloaded while offline)
+     * doesn't stall playback — bounded so an all-failing queue can't loop.
+     */
+    private fun failTrack(message: String) {
+        consecutiveErrors++
+        val q = _queue.value
+        if (q.size > 1 && consecutiveErrors < q.size) {
+            next()
+        } else {
+            consecutiveErrors = 0
+            _isLoading.value = false
+            _isPlaying.value = false
+            _error.value = message
         }
     }
 
