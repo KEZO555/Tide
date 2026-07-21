@@ -191,7 +191,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                 // it further when the volume line is taking top space.
                                 AlbumArt(
                                     cover = t.albumCover,
-                                    sizeUnits = if (showVolume) 5f else 7.5f,
+                                    sizeUnits = if (showVolume) 6.5f else 9.5f,
                                     modifier = Modifier.padding(bottom = 0.9f.gridUnitsAsDp()),
                                 )
                             }
