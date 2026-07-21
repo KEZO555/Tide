@@ -175,7 +175,7 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         AlbumArtBox(
                             cover = cover,
                             modifier = Modifier
-                                .weight(1f)
+                                .weight(6f)
                                 .aspectRatio(1f)
                                 .padding(bottom = 0.9f.gridUnitsAsDp()),
                         )
@@ -276,9 +276,12 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                                 align = TextAlign.End,
                             )
                         }
+                        if (hasArt) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
                         TransportControls(isPlaying = isPlaying)
                         if (hasArt) {
-                            Spacer(modifier = Modifier.height(0.3f.gridUnitsAsDp()))
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
