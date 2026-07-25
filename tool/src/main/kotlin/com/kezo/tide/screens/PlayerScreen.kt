@@ -144,9 +144,12 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                         modifier = Modifier.fillMaxWidth(0.9f),
                     ) {
                         if (t != null) {
+                            // Without artwork there's room to breathe, so the
+                            // track and artist scale up like the Home headlines.
                             LightText(
                                 text = t.artist,
-                                variant = LightTextVariant.Detail,
+                                variant = if (hasArt) LightTextVariant.Detail
+                                    else LightTextVariant.Heading,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,
@@ -166,7 +169,8 @@ class PlayerScreen(sealedActivity: SealedLightActivity) :
                             )
                             LightText(
                                 text = t.title,
-                                variant = LightTextVariant.Subheading,
+                                variant = if (hasArt) LightTextVariant.Subheading
+                                    else LightTextVariant.Title,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 align = TextAlign.Center,

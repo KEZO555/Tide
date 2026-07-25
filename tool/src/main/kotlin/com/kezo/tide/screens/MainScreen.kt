@@ -43,9 +43,11 @@ import com.kezo.tide.api.Track
 import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.Recents
 import com.kezo.tide.player.TidePlayer
+import com.kezo.tide.ui.ActionRow
 import com.kezo.tide.ui.Artwork
 import com.kezo.tide.ui.EmptyText
 import com.kezo.tide.ui.ErrorRetry
+import com.kezo.tide.ui.formatBytes
 import com.kezo.tide.ui.HomeSectionHeader
 import com.kezo.tide.ui.LoadingText
 import com.kezo.tide.ui.MediaRow
@@ -126,12 +128,13 @@ private fun sortPlaylists(
     else -> list
 }
 
-enum class MainTab { Home, Liked, Albums, Playlists, Search, Settings }
+enum class MainTab { Home, Liked, Albums, Playlists, Downloads, Search, Settings }
 
 fun tabForId(id: String): MainTab = when (id) {
     "liked" -> MainTab.Liked
     "albums" -> MainTab.Albums
     "playlists" -> MainTab.Playlists
+    "downloads" -> MainTab.Downloads
     "search" -> MainTab.Search
     "settings" -> MainTab.Settings
     else -> MainTab.Home
@@ -141,6 +144,7 @@ fun tabIcon(id: String): TabIcon = when (id) {
     "liked" -> TabIcon.Vector(Icons.Filled.Favorite)
     "albums" -> TabIcon.Vector(Icons.Filled.Album)
     "playlists" -> TabIcon.Light(LightIcons.LIST)
+    "downloads" -> TabIcon.Light(LightIcons.DOWNLOAD_ARROW)
     "search" -> TabIcon.Vector(Icons.Filled.Search)
     "settings" -> TabIcon.Vector(Icons.Filled.MoreHoriz)
     else -> TabIcon.Vector(Icons.Filled.Home)
@@ -479,6 +483,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 MainTab.Liked -> LikedTab()
                 MainTab.Albums -> AlbumsTab()
                 MainTab.Playlists -> PlaylistsTab()
+                MainTab.Downloads -> DownloadsTab()
                 MainTab.Search -> SearchTab()
                 MainTab.Settings -> SettingsTab()
             }
@@ -788,6 +793,79 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 }
             }
         }
+    }
+
+    // ---------- downloads ----------
+
+    @Composable
+    private fun ColumnScope.DownloadsTab() {
+        val downloads by Downloads.items.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        var confirmClear by remember { mutableStateOf(false) }
+        TabHeader("Downloads")
+
+        val totalBytes = downloads.sumOf { it.bytes }
+        val free = Downloads.freeBytes()
+        val summary = when {
+            downloads.isEmpty() && downloadingIds.isEmpty() ->
+                if (free > 0) "No downloads yet · ${formatBytes(free)} free" else "No downloads yet"
+            else -> buildString {
+                append("${downloads.size} ${if (downloads.size == 1) "song" else "songs"}")
+                append(" · ${formatBytes(totalBytes)}")
+                if (downloadingIds.isNotEmpty()) append(" · ${downloadingIds.size} downloading")
+                if (free > 0) append(" · ${formatBytes(free)} free")
+            }
+        }
+        LightText(
+            text = summary,
+            variant = LightTextVariant.Detail,
+            lighten = true,
+            modifier = Modifier.padding(
+                horizontal = 1f.gridUnitsAsDp(),
+                vertical = 0.5f.gridUnitsAsDp(),
+            ),
+        )
+
+        if (downloads.isEmpty()) {
+            EmptyText("Download songs, albums, or playlists to listen offline.")
+            return
+        }
+
+        val tracks = downloads.map { it.track }
+        LightLazyScrollView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            uniformItemHeightGridUnits = ROW_UNITS,
+        ) {
+            items(tracks.size) { i ->
+                val track = tracks[i]
+                NumberedTrackRow(
+                    number = null,
+                    track = track,
+                    active = current?.id == track.id,
+                    downloaded = true,
+                    onClick = {
+                        TidePlayer.play(tracks, i)
+                        navigateTo({ PlayerScreen(it) })
+                    },
+                    onLongClick = {
+                        navigateTo({ TrackOptionsScreen(it, track) })
+                    },
+                )
+            }
+        }
+
+        ActionRow(
+            text = if (confirmClear) "Tap again to remove all" else "Remove All Downloads",
+            onClick = {
+                if (confirmClear) {
+                    Downloads.clear()
+                    confirmClear = false
+                } else {
+                    confirmClear = true
+                }
+            },
+        )
     }
 
     // ---------- search ----------

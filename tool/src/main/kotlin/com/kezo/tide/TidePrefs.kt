@@ -40,6 +40,7 @@ object TidePrefs {
         SectionPref("liked", true),
         SectionPref("albums", true),
         SectionPref("playlists", true),
+        SectionPref("downloads", true),
         SectionPref("search", true),
         SectionPref("settings", true),
     )
@@ -136,7 +137,12 @@ object TidePrefs {
         }
     }
 
-    /** Decodes a stored list, keeping defaults for ids that are missing or new. */
+    /**
+     * Decodes a stored list, keeping defaults for ids that are missing or new.
+     * A new default (e.g. a tab added in an update) is inserted at its natural
+     * spot — right after its preceding default that the user still has — rather
+     * than tacked on at the end.
+     */
     private fun decode(raw: String, defaults: List<SectionPref>): List<SectionPref> {
         val stored = raw.split(",").mapNotNull { entry ->
             val parts = entry.split(":")
@@ -146,7 +152,16 @@ object TidePrefs {
                 null
             }
         }
-        val missing = defaults.filter { d -> stored.none { it.id == d.id } }
-        return stored + missing
+        val result = stored.toMutableList()
+        defaults.forEachIndexed { defIndex, d ->
+            if (result.none { it.id == d.id }) {
+                val prevId = defaults.subList(0, defIndex)
+                    .lastOrNull { pd -> result.any { it.id == pd.id } }?.id
+                val insertAt = if (prevId == null) 0
+                    else result.indexOfFirst { it.id == prevId } + 1
+                result.add(insertAt, d)
+            }
+        }
+        return result
     }
 }

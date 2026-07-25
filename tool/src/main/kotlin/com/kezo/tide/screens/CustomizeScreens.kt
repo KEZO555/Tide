@@ -184,6 +184,7 @@ class NavBarScreen(sealedActivity: SealedLightActivity) : SectionEditorScreen(
         "liked" to "Liked Songs",
         "albums" to "Albums",
         "playlists" to "Playlists",
+        "downloads" to "Downloads",
         "search" to "Search",
         "settings" to "Settings",
     ),
