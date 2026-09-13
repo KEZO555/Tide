@@ -5,6 +5,7 @@ import android.media.MediaPlayer
 import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.thelightphone.sdk.LightBackgroundAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,6 +95,30 @@ object TidePlayer {
                     delay(500)
                 }
             }
+        }
+
+        // Background playback: let the SDK's foreground media service mirror what
+        // we're playing, so LightOS keeps our process alive and auto-advance
+        // works while backgrounded. Notification transport controls route back
+        // here.
+        LightBackgroundAudio.configure(object : LightBackgroundAudio.Controller {
+            override fun onTogglePlay() = toggle()
+            override fun onNext() = next()
+            override fun onPrevious() = previous()
+        })
+        scope.launch {
+            combine(_current, _isPlaying) { track, playing -> track to playing }
+                .collect { (track, playing) ->
+                    if (track != null) {
+                        LightBackgroundAudio.update(
+                            LightBackgroundAudio.NowPlaying(
+                                title = track.title,
+                                artist = track.artist,
+                                isPlaying = playing,
+                            )
+                        )
+                    }
+                }
         }
     }
 
@@ -371,5 +397,6 @@ object TidePlayer {
         _isLoading.value = false
         _positionMs.value = 0
         _durationMs.value = 0
+        LightBackgroundAudio.stop()
     }
 }

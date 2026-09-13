@@ -12,11 +12,27 @@ package com.thelightphone.plugin
  * injection.
  */
 object ManifestGenerator {
+    /** Auto-added (deduped) when a tool opts into background audio. */
+    private val BACKGROUND_AUDIO_PERMISSIONS = listOf(
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.POST_NOTIFICATIONS",
+    )
+
     fun render(metadata: LightToolMetadata): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
         appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">""")
         for (perm in metadata.permissions) {
             appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
+        }
+        // Background-audio tools get the foreground-service permissions they need
+        // for the SDK playback service, without having to list each one.
+        if (metadata.backgroundAudio) {
+            for (perm in BACKGROUND_AUDIO_PERMISSIONS) {
+                if (perm !in metadata.permissions) {
+                    appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
+                }
+            }
         }
         // Emit Play-Store-inferred hardware features as required="false" so
         // PermissionImpliesUnsupportedChromeOsHardware lint stays quiet and
@@ -44,6 +60,12 @@ object ManifestGenerator {
         appendLine("""                <category android:name="android.intent.category.LAUNCHER" />""")
         appendLine("""            </intent-filter>""")
         appendLine("""        </activity>""")
+        if (metadata.backgroundAudio) {
+            appendLine("""        <service""")
+            appendLine("""            android:name="com.thelightphone.sdk.LightPlaybackService"""")
+            appendLine("""            android:exported="false"""")
+            appendLine("""            android:foregroundServiceType="mediaPlayback" />""")
+        }
         appendLine("""        <receiver""")
         appendLine("""            android:name="com.thelightphone.sdk.LightSdkReceiver"""")
         appendLine("""            android:enabled="true"""")

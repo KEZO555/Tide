@@ -21,6 +21,10 @@ data class LightToolMetadata(
     val versionName: String,
     val permissions: List<String>,
     val serverPackage: String,
+    /** When true the generated manifest declares the SDK's foreground media
+     *  playback service so audio keeps playing (and auto-advancing) in the
+     *  background. */
+    val backgroundAudio: Boolean = false,
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -58,6 +62,7 @@ data class LightToolMetadata(
                 versionName = validateVersionName(tool.tomlString("versionName")),
                 permissions = validatePermissions(tool.tomlStringList("permissions")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage")),
+                backgroundAudio = tool.tomlBoolean("backgroundAudio") ?: false,
             )
         }
 
@@ -137,6 +142,12 @@ object LightToolPolicy {
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
+        // Emitted automatically when [tool] backgroundAudio = true so a tool can
+        // keep audio playing (and advancing) while backgrounded via the SDK's
+        // foreground playback service. Listed here so an explicit declaration
+        // also validates.
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_AUDIO",
@@ -176,6 +187,12 @@ private fun org.tomlj.TomlTable.tomlLong(key: String): Long? = try {
     if (contains(key)) getLong(key) else null
 } catch (e: TomlInvalidTypeException) {
     throw LightToolMetadataException("tool.$key must be an integer")
+}
+
+private fun org.tomlj.TomlTable.tomlBoolean(key: String): Boolean? = try {
+    if (contains(key)) getBoolean(key) else null
+} catch (e: TomlInvalidTypeException) {
+    throw LightToolMetadataException("tool.$key must be a boolean")
 }
 
 private fun org.tomlj.TomlTable.tomlStringList(key: String): List<String>? {

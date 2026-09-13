@@ -1,8 +1,11 @@
 [tool]
 id = "com.kezo.tide"
 label = "Tide"
-versionCode = 37
-versionName = "2.6"
+versionCode = 38
+versionName = "2.7"
 permissions = ["android.permission.INTERNET"]
+# Run the SDK foreground media service so playback keeps going / auto-advancing
+# while Tide is backgrounded. Adds the foreground-service permissions for you.
+backgroundAudio = true
 # use "com.thelightphone.sdk.emulator" when running on the LightOS emulator
 serverPackage = "com.lightos"
