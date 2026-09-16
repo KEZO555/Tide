@@ -586,6 +586,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun HomeRecents() {
         val recents by Recents.tracks.collectAsState()
         val current by TidePlayer.current.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
         HomeSectionHeader("Recently Played")
         if (recents.isEmpty()) {
             LightText(
@@ -600,6 +601,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     number = null,
                     track = track,
                     active = current?.id == track.id,
+                    downloaded = track.id in downloadedIds,
                     onClick = {
                         TidePlayer.play(recents, i)
                         navigateTo({ PlayerScreen(it) })
@@ -1061,6 +1063,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         results: SearchResults,
         currentTrackId: Long?,
     ) {
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
         val empty = results.tracks.isEmpty() && results.albums.isEmpty() &&
             results.artists.isEmpty() && results.playlists.isEmpty()
         if (empty) {
@@ -1075,6 +1078,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         number = null,
                         track = track,
                         active = currentTrackId == track.id,
+                        downloaded = track.id in downloadedIds,
                         onClick = {
                             TidePlayer.play(results.tracks, i)
                             navigateTo({ PlayerScreen(it) })

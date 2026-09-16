@@ -12,6 +12,7 @@ import com.kezo.tide.api.Album
 import com.kezo.tide.api.Artist
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.player.Downloads
 import com.kezo.tide.player.TidePlayer
 import com.kezo.tide.ui.ErrorRetry
 import com.kezo.tide.ui.LoadingText
@@ -112,6 +113,7 @@ class ArtistScreen(
         val albums by viewModel.albums.collectAsState()
         val favorite by viewModel.favorite.collectAsState()
         val current by TidePlayer.current.collectAsState()
+        val downloadedIds by Downloads.downloadedIds.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -134,6 +136,7 @@ class ArtistScreen(
                                 number = null,
                                 track = track,
                                 active = current?.id == track.id,
+                                downloaded = track.id in downloadedIds,
                                 onClick = {
                                     TidePlayer.play(s.value, i)
                                     if (PlayerPresence.openCount == 0) {
