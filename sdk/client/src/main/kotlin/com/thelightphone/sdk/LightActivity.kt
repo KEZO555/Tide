@@ -139,11 +139,13 @@ class LightActivity internal constructor() : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        LightAppState.setForeground(false)
         currentScreen.value?.screen?.notifyAppPause()
     }
 
     override fun onResume() {
         super.onResume()
+        LightAppState.setForeground(true)
         currentScreen.value?.screen?.notifyWillShow()
     }
 }

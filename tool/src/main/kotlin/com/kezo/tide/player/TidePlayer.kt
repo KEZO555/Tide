@@ -5,6 +5,8 @@ import android.media.MediaPlayer
 import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
+import com.kezo.tide.ui.PlayerPresence
+import com.thelightphone.sdk.LightAppState
 import com.thelightphone.sdk.LightBackgroundAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,16 +85,24 @@ object TidePlayer {
     private var originalQueue: List<Track> = emptyList()
 
     init {
-        // Tick the position only while playing; when paused/stopped the collector
-        // suspends instead of waking every 500ms.
+        // Poll position only while playing AND a player screen is visible.
+        // Nothing else reads positionMs, so during background / screen-off
+        // playback this collector stays suspended — no periodic wakeups. 1s
+        // cadence is enough for the seconds-resolution scrubber and time label.
         scope.launch {
-            _isPlaying.collectLatest { playing ->
-                while (playing && isActive) {
+            combine(
+                _isPlaying,
+                PlayerPresence.openCountFlow,
+                LightAppState.foreground,
+            ) { playing, open, foreground ->
+                playing && open > 0 && foreground
+            }.collectLatest { active ->
+                while (active && isActive) {
                     val p = player
                     if (p != null && prepared) {
                         runCatching { _positionMs.value = p.currentPosition }
                     }
-                    delay(500)
+                    delay(1000)
                 }
             }
         }

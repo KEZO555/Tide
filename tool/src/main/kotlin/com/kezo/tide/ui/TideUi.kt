@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,7 +60,15 @@ const val ROW_UNITS = 3.8f
  * headers can pop back toward it instead of stacking endless copies.
  */
 object PlayerPresence {
-    var openCount: Int = 0
+    private val _openCount = MutableStateFlow(0)
+
+    /** Observable count so background work (e.g. the position ticker) can pause
+     *  itself when no player screen is visible. */
+    val openCountFlow: StateFlow<Int> = _openCount.asStateFlow()
+
+    var openCount: Int
+        get() = _openCount.value
+        set(value) { _openCount.value = value }
 }
 
 sealed interface UiState<out T> {
