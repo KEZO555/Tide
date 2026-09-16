@@ -1,8 +1,8 @@
 [tool]
 id = "com.kezo.tide"
 label = "Tide"
-versionCode = 43
-versionName = "2.99"
+versionCode = 44
+versionName = "3.0"
 permissions = ["android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"]
 # Run the SDK foreground media service so playback keeps going / auto-advancing
 # while Tide is backgrounded. Adds the foreground-service permissions for you.

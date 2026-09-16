@@ -1251,24 +1251,6 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             return
         }
         LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (results.tracks.isNotEmpty()) {
-                SectionHeader("Tracks")
-                results.tracks.forEachIndexed { i, track ->
-                    NumberedTrackRow(
-                        number = null,
-                        track = track,
-                        active = currentTrackId == track.id,
-                        downloaded = track.id in downloadedIds,
-                        onClick = {
-                            TidePlayer.play(results.tracks, i)
-                            navigateTo({ PlayerScreen(it) })
-                        },
-                        onLongClick = {
-                            navigateTo({ TrackOptionsScreen(it, track) })
-                        },
-                    )
-                }
-            }
             if (results.artists.isNotEmpty()) {
                 SectionHeader("Artists")
                 results.artists.forEach { artist ->
@@ -1294,6 +1276,24 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                     Tidal.albumTracks(album.id)
                                 }
                             })
+                        },
+                    )
+                }
+            }
+            if (results.tracks.isNotEmpty()) {
+                SectionHeader("Songs")
+                results.tracks.forEachIndexed { i, track ->
+                    NumberedTrackRow(
+                        number = null,
+                        track = track,
+                        active = currentTrackId == track.id,
+                        downloaded = track.id in downloadedIds,
+                        onClick = {
+                            TidePlayer.play(results.tracks, i)
+                            navigateTo({ PlayerScreen(it) })
+                        },
+                        onLongClick = {
+                            navigateTo({ TrackOptionsScreen(it, track) })
                         },
                     )
                 }
