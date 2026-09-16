@@ -237,6 +237,7 @@ fun MediaRow(
     secondary: String,
     onClick: () -> Unit,
     cover: String? = null,
+    downloaded: Boolean = false,
 ) {
     val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
     Row(
@@ -273,6 +274,15 @@ fun MediaRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+        if (downloaded) {
+            LightIcon(
+                icon = LightIcons.DOWNLOADED_ARROW,
+                size = 1.4f,
+                modifier = Modifier
+                    .padding(start = 0.5f.gridUnitsAsDp())
+                    .alpha(0.75f),
+            )
         }
     }
 }

@@ -88,7 +88,6 @@ import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
@@ -245,10 +244,6 @@ class MainViewModel(
         viewModelScope.launch {
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
-                // Offline (manual toggle or no connection): open straight to
-                // Downloads. Wait for persisted prefs so the decision is reliable.
-                TidePrefs.loaded.first { it }
-                if (TidePrefs.offlineEffective.value) tab.value = MainTab.Downloads
                 session.value = Session.Ready
                 ensureLoaded(MainTab.Home)
                 ensureLoaded(MainTab.Liked)
@@ -366,6 +361,19 @@ class MainViewModel(
     fun submitSearch(query: CharSequence) {
         val q = query.toString().trim()
         if (q.isEmpty()) return
+        // Offline: search within downloaded tracks instead of hitting the network.
+        if (TidePrefs.offlineEffective.value) {
+            val matches = Downloads.items.value.map { it.track }.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                    it.artist.contains(q, ignoreCase = true) ||
+                    it.albumTitle.contains(q, ignoreCase = true)
+            }
+            searchMode.value = SearchMode.Results(
+                q,
+                SearchResults(matches, emptyList(), emptyList(), emptyList()),
+            )
+            return
+        }
         searchMode.value = SearchMode.Searching(q)
         viewModelScope.launch(Dispatchers.IO) {
             searchMode.value = try {
@@ -407,17 +415,13 @@ class MainViewModel(
     fun firstEnabledTab(): MainTab =
         TidePrefs.navTabs.value.firstOrNull { it.enabled }?.let { tabForId(it.id) } ?: MainTab.Home
 
-    /** The tab that acts as "home" — Downloads while offline, else the first shown tab. */
-    fun homeTab(): MainTab =
-        if (TidePrefs.offlineEffective.value) MainTab.Downloads else firstEnabledTab()
-
     override fun onBackPressed(): Boolean {
         if (session.value !is Session.Ready) return false
         if (tab.value == MainTab.Search && searchMode.value !is SearchMode.Input) {
             newSearch()
             return true
         }
-        val homeTab = homeTab()
+        val homeTab = firstEnabledTab()
         if (tab.value != homeTab) {
             tab.value = homeTab
             return true
@@ -520,15 +524,13 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun ColumnScope.ReadyContent() {
         val tab by viewModel.tab.collectAsState()
         val navPrefs by TidePrefs.navTabs.collectAsState()
-        val offline by TidePrefs.offlineEffective.collectAsState()
         val enabled = navPrefs.filter { it.enabled }
 
-        // If the current tab was hidden from settings, hop to "home". Downloads
-        // stays valid while offline even if hidden, since it's the offline home.
-        LaunchedEffect(enabled, tab, offline) {
-            val valid = enabled.any { tabForId(it.id) == tab } ||
-                (offline && tab == MainTab.Downloads)
-            if (!valid) viewModel.selectTab(viewModel.homeTab())
+        // if the current tab was hidden from settings, hop to the first shown one
+        LaunchedEffect(enabled, tab) {
+            if (enabled.none { tabForId(it.id) == tab }) {
+                viewModel.selectTab(viewModel.firstEnabledTab())
+            }
         }
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -553,6 +555,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun TabHeader(title: String) {
         // Phono-style header: centered title with the now-playing waveform
         // logo in the top-right on every screen.
+        val offline by TidePrefs.offlineEffective.collectAsState()
         LightTopBar(
             center = LightTopBarCenter.Text(title),
             rightButton = LightBarButton.LightIcon(
@@ -563,10 +566,26 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                 },
             ),
         )
+        if (offline) {
+            LightText(
+                text = "Offline",
+                variant = LightTextVariant.Superfine,
+                lighten = true,
+                align = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 0.25f.gridUnitsAsDp()),
+            )
+        }
     }
 
     @Composable
     private fun ColumnScope.HomeTab() {
+        val offline by TidePrefs.offlineEffective.collectAsState()
+        if (offline) {
+            OfflineHome()
+            return
+        }
         val sections by TidePrefs.homeSections.collectAsState()
         TabHeader("Home")
         LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -576,6 +595,81 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     "artists" -> HomeArtists()
                     "mixes" -> HomeMixes()
                     "releases" -> HomeReleases()
+                }
+            }
+            Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
+        }
+    }
+
+    /** Home while offline: recently played (downloaded) + downloaded albums/artists. */
+    @Composable
+    private fun ColumnScope.OfflineHome() {
+        val downloads by Downloads.items.collectAsState()
+        val recents by Recents.tracks.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        TabHeader("Home")
+
+        val tracks = remember(downloads) { downloads.map { it.track } }
+        val downloadedIds = remember(downloads) { tracks.map { it.id }.toSet() }
+        val recentsDownloaded = remember(recents, downloadedIds) {
+            recents.filter { it.id in downloadedIds }
+        }
+        val albums = remember(downloads) { groupDownloadedAlbums(tracks) }
+        val artists = remember(downloads) { groupDownloadedArtists(tracks) }
+
+        if (tracks.isEmpty()) {
+            EmptyText("You're offline. Download songs to listen here.")
+            return
+        }
+
+        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (recentsDownloaded.isNotEmpty()) {
+                HomeSectionHeader("Recently Played")
+                recentsDownloaded.take(5).forEach { track ->
+                    val idx = recentsDownloaded.indexOf(track)
+                    NumberedTrackRow(
+                        number = null,
+                        track = track,
+                        active = current?.id == track.id,
+                        downloaded = true,
+                        onClick = {
+                            TidePlayer.play(recentsDownloaded, idx)
+                            navigateTo({ PlayerScreen(it) })
+                        },
+                        onLongClick = { navigateTo({ TrackOptionsScreen(it, track) }) },
+                    )
+                }
+            }
+            if (albums.isNotEmpty()) {
+                HomeSectionHeader("Albums")
+                albums.forEach { al ->
+                    val albumTracks = al.tracks
+                    MediaRow(
+                        primary = al.title,
+                        secondary = al.artist,
+                        cover = al.cover,
+                        downloaded = true,
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(it, al.title, numbered = true, shuffleable = true) { albumTracks }
+                            })
+                        },
+                    )
+                }
+            }
+            if (artists.isNotEmpty()) {
+                HomeSectionHeader("Artists")
+                artists.forEach { ar ->
+                    val artistTracks = ar.tracks
+                    MediaRow(
+                        primary = ar.name,
+                        secondary = "${artistTracks.size} ${if (artistTracks.size == 1) "song" else "songs"}",
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(it, ar.name, shuffleable = true) { artistTracks }
+                            })
+                        },
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
@@ -717,6 +811,11 @@ class MainScreen(sealedActivity: SealedLightActivity) :
 
     @Composable
     private fun ColumnScope.LikedTab() {
+        val offline by TidePrefs.offlineEffective.collectAsState()
+        if (offline) {
+            OfflineSongs()
+            return
+        }
         val state by viewModel.liked.collectAsState()
         val sort by viewModel.likedSort.collectAsState()
         val current by TidePlayer.current.collectAsState()
@@ -761,10 +860,51 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
+    /** Liked tab while offline: your downloaded songs. */
+    @Composable
+    private fun ColumnScope.OfflineSongs() {
+        val downloads by Downloads.items.collectAsState()
+        val current by TidePlayer.current.collectAsState()
+        TabHeader("Downloaded Songs")
+        val tracks = remember(downloads) { downloads.map { it.track } }
+        if (tracks.isEmpty()) {
+            EmptyText("You're offline. Download songs to listen here.")
+            return
+        }
+        LightLazyScrollView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            uniformItemHeightGridUnits = ROW_UNITS,
+        ) {
+            items(tracks.size) { i ->
+                val track = tracks[i]
+                NumberedTrackRow(
+                    number = null,
+                    track = track,
+                    active = current?.id == track.id,
+                    downloaded = true,
+                    onClick = {
+                        TidePlayer.play(tracks, i)
+                        navigateTo({ PlayerScreen(it) })
+                    },
+                    onLongClick = { navigateTo({ TrackOptionsScreen(it, track) }) },
+                )
+            }
+        }
+    }
+
     @Composable
     private fun ColumnScope.AlbumsTab() {
+        val offline by TidePrefs.offlineEffective.collectAsState()
+        if (offline) {
+            OfflineAlbums()
+            return
+        }
         val state by viewModel.albums.collectAsState()
         val sort by viewModel.albumsSort.collectAsState()
+        val downloadedAlbumIds by Downloads.items.collectAsState()
+        val dlAlbumIds = remember(downloadedAlbumIds) {
+            downloadedAlbumIds.map { it.track.albumId }.toSet()
+        }
         TabHeader("Albums")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -791,6 +931,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                 secondary = listOf(album.artist, album.year)
                                     .filter { it.isNotBlank() }
                                     .joinToString(" · "),
+                                downloaded = album.id in dlAlbumIds,
                                 onClick = {
                                     navigateTo({
                                         TrackListScreen(
@@ -808,8 +949,47 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         }
     }
 
+    /** Albums tab while offline: your downloaded albums. */
+    @Composable
+    private fun ColumnScope.OfflineAlbums() {
+        val downloads by Downloads.items.collectAsState()
+        TabHeader("Albums")
+        val tracks = remember(downloads) { downloads.map { it.track } }
+        val albums = remember(downloads) { groupDownloadedAlbums(tracks) }
+        if (albums.isEmpty()) {
+            EmptyText("You're offline. Download albums to see them here.")
+            return
+        }
+        LightLazyScrollView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            uniformItemHeightGridUnits = ROW_UNITS,
+        ) {
+            items(albums.size) { i ->
+                val al = albums[i]
+                val albumTracks = al.tracks
+                MediaRow(
+                    primary = al.title,
+                    cover = al.cover,
+                    secondary = al.artist,
+                    downloaded = true,
+                    onClick = {
+                        navigateTo({
+                            TrackListScreen(it, al.title, numbered = true, shuffleable = true) { albumTracks }
+                        })
+                    },
+                )
+            }
+        }
+    }
+
     @Composable
     private fun ColumnScope.PlaylistsTab() {
+        val offline by TidePrefs.offlineEffective.collectAsState()
+        if (offline) {
+            TabHeader("Playlists")
+            EmptyText("Playlists aren't available offline.")
+            return
+        }
         val state by viewModel.playlists.collectAsState()
         val sort by viewModel.playlistsSort.collectAsState()
         TabHeader("Playlists")
