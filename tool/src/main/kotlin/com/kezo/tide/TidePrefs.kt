@@ -65,6 +65,10 @@ object TidePrefs {
     private val _artworkThumbnails = MutableStateFlow(false)
     val artworkThumbnails: StateFlow<Boolean> = _artworkThumbnails.asStateFlow()
 
+    private val _loaded = MutableStateFlow(false)
+    /** Flips true once persisted prefs have been read from disk (or the read failed). */
+    val loaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
     fun init(dataStore: DataStore<Preferences>) {
         if (store != null) return
         store = dataStore
@@ -78,6 +82,8 @@ object TidePrefs {
                 p[KEY_ART_THUMBS]?.let { _artworkThumbnails.value = it }
             } catch (_: Exception) {
                 // defaults are fine
+            } finally {
+                _loaded.value = true
             }
         }
     }

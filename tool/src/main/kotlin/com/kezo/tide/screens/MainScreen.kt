@@ -88,6 +88,7 @@ import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private val QUALITIES = listOf("LOW", "HIGH", "LOSSLESS")
@@ -150,6 +151,49 @@ fun tabIcon(id: String): TabIcon = when (id) {
     else -> TabIcon.Vector(Icons.Filled.Home)
 }
 
+/** A downloaded album (grouped from downloaded tracks) for the Downloads tab. */
+private data class DownloadedAlbum(
+    val id: Long,
+    val title: String,
+    val cover: String,
+    val artist: String,
+    val tracks: List<Track>,
+)
+
+/** A downloaded artist (grouped from downloaded tracks) for the Downloads tab. */
+private data class DownloadedArtist(
+    val id: Long,
+    val name: String,
+    val tracks: List<Track>,
+)
+
+/** Group downloaded tracks into albums, sorted by title. Purely offline. */
+private fun groupDownloadedAlbums(tracks: List<Track>): List<DownloadedAlbum> =
+    tracks.groupBy { it.albumId }
+        .map { (id, ts) ->
+            val first = ts.first()
+            DownloadedAlbum(
+                id = id,
+                title = first.albumTitle.ifBlank { "Unknown album" },
+                cover = first.albumCover,
+                artist = first.artist,
+                tracks = ts,
+            )
+        }
+        .sortedBy { it.title.lowercase() }
+
+/** Group downloaded tracks by artist, sorted by name. Purely offline. */
+private fun groupDownloadedArtists(tracks: List<Track>): List<DownloadedArtist> =
+    tracks.groupBy { it.artistId }
+        .map { (id, ts) ->
+            DownloadedArtist(
+                id = id,
+                name = ts.first().artist.ifBlank { "Unknown artist" },
+                tracks = ts,
+            )
+        }
+        .sortedBy { it.name.lowercase() }
+
 class MainViewModel(
     dataStore: DataStore<Preferences>,
     filesDir: java.io.File,
@@ -201,6 +245,10 @@ class MainViewModel(
         viewModelScope.launch {
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
+                // Offline mode: open straight to Downloads (online tabs can't load).
+                // Wait for persisted prefs so this decision is reliable at startup.
+                TidePrefs.loaded.first { it }
+                if (TidePrefs.offlineMode.value) tab.value = MainTab.Downloads
                 session.value = Session.Ready
                 ensureLoaded(MainTab.Home)
                 ensureLoaded(MainTab.Liked)
@@ -359,13 +407,17 @@ class MainViewModel(
     fun firstEnabledTab(): MainTab =
         TidePrefs.navTabs.value.firstOrNull { it.enabled }?.let { tabForId(it.id) } ?: MainTab.Home
 
+    /** The tab that acts as "home" — Downloads while offline, else the first shown tab. */
+    fun homeTab(): MainTab =
+        if (TidePrefs.offlineMode.value) MainTab.Downloads else firstEnabledTab()
+
     override fun onBackPressed(): Boolean {
         if (session.value !is Session.Ready) return false
         if (tab.value == MainTab.Search && searchMode.value !is SearchMode.Input) {
             newSearch()
             return true
         }
-        val homeTab = firstEnabledTab()
+        val homeTab = homeTab()
         if (tab.value != homeTab) {
             tab.value = homeTab
             return true
@@ -468,13 +520,15 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun ColumnScope.ReadyContent() {
         val tab by viewModel.tab.collectAsState()
         val navPrefs by TidePrefs.navTabs.collectAsState()
+        val offline by TidePrefs.offlineMode.collectAsState()
         val enabled = navPrefs.filter { it.enabled }
 
-        // if the current tab was hidden from settings, hop to the first shown one
-        LaunchedEffect(enabled, tab) {
-            if (enabled.none { tabForId(it.id) == tab }) {
-                viewModel.selectTab(viewModel.firstEnabledTab())
-            }
+        // If the current tab was hidden from settings, hop to "home". Downloads
+        // stays valid while offline even if hidden, since it's the offline home.
+        LaunchedEffect(enabled, tab, offline) {
+            val valid = enabled.any { tabForId(it.id) == tab } ||
+                (offline && tab == MainTab.Downloads)
+            if (!valid) viewModel.selectTab(viewModel.homeTab())
         }
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -832,13 +886,56 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             return
         }
 
-        val tracks = downloads.map { it.track }
-        LightLazyScrollView(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            uniformItemHeightGridUnits = ROW_UNITS,
-        ) {
-            items(tracks.size) { i ->
-                val track = tracks[i]
+        val tracks = remember(downloads) { downloads.map { it.track } }
+        val albums = remember(downloads) { groupDownloadedAlbums(tracks) }
+        val artists = remember(downloads) { groupDownloadedArtists(tracks) }
+
+        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (albums.isNotEmpty()) {
+                SectionHeader("Albums")
+                albums.forEach { al ->
+                    val albumTracks = al.tracks
+                    MediaRow(
+                        primary = al.title,
+                        secondary = listOf(
+                            al.artist,
+                            "${albumTracks.size} ${if (albumTracks.size == 1) "song" else "songs"}",
+                        ).filter { it.isNotBlank() }.joinToString(" · "),
+                        cover = al.cover,
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(
+                                    it, al.title,
+                                    numbered = true,
+                                    shuffleable = true,
+                                ) { albumTracks }
+                            })
+                        },
+                    )
+                }
+            }
+
+            if (artists.isNotEmpty()) {
+                SectionHeader("Artists")
+                artists.forEach { ar ->
+                    val artistTracks = ar.tracks
+                    MediaRow(
+                        primary = ar.name,
+                        secondary = "${artistTracks.size} ${if (artistTracks.size == 1) "song" else "songs"}",
+                        onClick = {
+                            navigateTo({
+                                TrackListScreen(
+                                    it, ar.name,
+                                    shuffleable = true,
+                                ) { artistTracks }
+                            })
+                        },
+                    )
+                }
+            }
+
+            SectionHeader("Songs")
+            tracks.forEachIndexed { i, track ->
                 NumberedTrackRow(
                     number = null,
                     track = track,
@@ -853,6 +950,8 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     },
                 )
             }
+
+            Spacer(modifier = Modifier.height(1f.gridUnitsAsDp()))
         }
 
         ActionRow(
