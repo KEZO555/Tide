@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,6 +36,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Track
 import com.thelightphone.sdk.ui.LightIcon
@@ -130,6 +132,31 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Trailing download state for a list row: a spinning loading circle while the
+ * track/album is downloading, or the downloaded arrow once it's on disk.
+ */
+@Composable
+private fun DownloadIndicator(downloading: Boolean, downloaded: Boolean) {
+    when {
+        downloading -> CircularProgressIndicator(
+            color = LightThemeTokens.colors.content,
+            strokeWidth = 1.5.dp,
+            modifier = Modifier
+                .padding(start = 0.5f.gridUnitsAsDp())
+                .size(1.4f.gridUnitsAsDp())
+                .alpha(0.75f),
+        )
+        downloaded -> LightIcon(
+            icon = LightIcons.DOWNLOADED_ARROW,
+            size = 1.4f,
+            modifier = Modifier
+                .padding(start = 0.5f.gridUnitsAsDp())
+                .alpha(0.75f),
+        )
+    }
+}
+
+/**
  * Phono library track row: number column, large title, lighter
  * "artist · duration" line beneath.
  */
@@ -141,6 +168,7 @@ fun NumberedTrackRow(
     onClick: () -> Unit,
     active: Boolean = false,
     downloaded: Boolean = false,
+    downloading: Boolean = false,
     onLongClick: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -207,15 +235,7 @@ fun NumberedTrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (downloaded) {
-            LightIcon(
-                icon = LightIcons.DOWNLOADED_ARROW,
-                size = 1.4f,
-                modifier = Modifier
-                    .padding(start = 0.5f.gridUnitsAsDp())
-                    .alpha(0.75f),
-            )
-        }
+        DownloadIndicator(downloading = downloading, downloaded = downloaded)
     }
 }
 
@@ -238,6 +258,7 @@ fun MediaRow(
     onClick: () -> Unit,
     cover: String? = null,
     downloaded: Boolean = false,
+    downloading: Boolean = false,
 ) {
     val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
     Row(
@@ -275,15 +296,7 @@ fun MediaRow(
                 )
             }
         }
-        if (downloaded) {
-            LightIcon(
-                icon = LightIcons.DOWNLOADED_ARROW,
-                size = 1.4f,
-                modifier = Modifier
-                    .padding(start = 0.5f.gridUnitsAsDp())
-                    .alpha(0.75f),
-            )
-        }
+        DownloadIndicator(downloading = downloading, downloaded = downloaded)
     }
 }
 

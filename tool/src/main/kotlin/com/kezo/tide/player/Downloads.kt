@@ -48,6 +48,26 @@ object Downloads {
     private val _downloadingIds = MutableStateFlow<Set<Long>>(emptySet())
     val downloadingIds: StateFlow<Set<Long>> = _downloadingIds.asStateFlow()
 
+    /** Albums with at least one track currently downloading (for a spinner). */
+    private val _downloadingAlbumIds = MutableStateFlow<Set<Long>>(emptySet())
+    val downloadingAlbumIds: StateFlow<Set<Long>> = _downloadingAlbumIds.asStateFlow()
+
+    /** albumId -> number of its tracks still downloading. */
+    private val albumCounts = mutableMapOf<Long, Int>()
+
+    @Synchronized
+    private fun incAlbum(albumId: Long) {
+        albumCounts[albumId] = (albumCounts[albumId] ?: 0) + 1
+        _downloadingAlbumIds.value = albumCounts.keys.toSet()
+    }
+
+    @Synchronized
+    private fun decAlbum(albumId: Long) {
+        val next = (albumCounts[albumId] ?: 0) - 1
+        if (next <= 0) albumCounts.remove(albumId) else albumCounts[albumId] = next
+        _downloadingAlbumIds.value = albumCounts.keys.toSet()
+    }
+
     /** trackId -> download progress fraction (0..1) while downloading. */
     private val _progress = MutableStateFlow<Map<Long, Float>>(emptyMap())
     val progress: StateFlow<Map<Long, Float>> = _progress.asStateFlow()
@@ -91,9 +111,11 @@ object Downloads {
     fun download(track: Track) {
         if (track.id in _downloadedIds.value || track.id in _downloadingIds.value) return
         _downloadingIds.value = _downloadingIds.value + track.id
+        incAlbum(track.albumId)
         scope.launch {
             fetch(track)
             _downloadingIds.value = _downloadingIds.value - track.id
+            decAlbum(track.albumId)
         }
     }
 
@@ -102,10 +124,12 @@ object Downloads {
         val pending = tracks.filter { it.id !in _downloadedIds.value && it.id !in _downloadingIds.value }
         if (pending.isEmpty()) return
         _downloadingIds.value = _downloadingIds.value + pending.map { it.id }
+        pending.forEach { incAlbum(it.albumId) }
         scope.launch {
             for (t in pending) {
                 fetch(t)
                 _downloadingIds.value = _downloadingIds.value - t.id
+                decAlbum(t.albumId)
             }
         }
     }

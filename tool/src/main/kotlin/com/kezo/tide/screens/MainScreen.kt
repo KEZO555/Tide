@@ -681,6 +681,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val recents by Recents.tracks.collectAsState()
         val current by TidePlayer.current.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
         HomeSectionHeader("Recently Played")
         if (recents.isEmpty()) {
             LightText(
@@ -696,6 +697,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     track = track,
                     active = current?.id == track.id,
                     downloaded = track.id in downloadedIds,
+                    downloading = track.id in downloadingIds,
                     onClick = {
                         TidePlayer.play(recents, i)
                         navigateTo({ PlayerScreen(it) })
@@ -820,6 +822,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val sort by viewModel.likedSort.collectAsState()
         val current by TidePlayer.current.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
         TabHeader("Liked Songs")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -845,6 +848,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                 track = track,
                                 active = current?.id == track.id,
                                 downloaded = track.id in downloadedIds,
+                                downloading = track.id in downloadingIds,
                                 onClick = {
                                     TidePlayer.play(list, i)
                                     navigateTo({ PlayerScreen(it) })
@@ -905,6 +909,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val dlAlbumIds = remember(downloadedAlbumIds) {
             downloadedAlbumIds.map { it.track.albumId }.toSet()
         }
+        val downloadingAlbumIds by Downloads.downloadingAlbumIds.collectAsState()
         TabHeader("Albums")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -932,6 +937,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                     .filter { it.isNotBlank() }
                                     .joinToString(" · "),
                                 downloaded = album.id in dlAlbumIds,
+                                downloading = album.id in downloadingAlbumIds,
                                 onClick = {
                                     navigateTo({
                                         TrackListScreen(
@@ -1244,6 +1250,8 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         currentTrackId: Long?,
     ) {
         val downloadedIds by Downloads.downloadedIds.collectAsState()
+        val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val downloadingAlbumIds by Downloads.downloadingAlbumIds.collectAsState()
         val empty = results.tracks.isEmpty() && results.albums.isEmpty() &&
             results.artists.isEmpty() && results.playlists.isEmpty()
         if (empty) {
@@ -1270,6 +1278,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         secondary = listOf(album.artist, album.year)
                             .filter { it.isNotBlank() }
                             .joinToString(" · "),
+                        downloading = album.id in downloadingAlbumIds,
                         onClick = {
                             navigateTo({
                                 TrackListScreen(it, album.title, numbered = true) {
@@ -1288,6 +1297,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         track = track,
                         active = currentTrackId == track.id,
                         downloaded = track.id in downloadedIds,
+                        downloading = track.id in downloadingIds,
                         onClick = {
                             TidePlayer.play(results.tracks, i)
                             navigateTo({ PlayerScreen(it) })
