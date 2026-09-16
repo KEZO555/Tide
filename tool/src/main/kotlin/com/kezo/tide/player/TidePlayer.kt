@@ -248,9 +248,10 @@ object TidePlayer {
             val local = Downloads.localPath(track.id)
             val url = if (local != null) {
                 local
-            } else if (TidePrefs.offlineMode.value) {
-                // Offline mode: never stream — skip toward a downloaded track.
-                if (gen == generation) failTrack("Offline mode — not downloaded")
+            } else if (TidePrefs.offlineEffective.value) {
+                // Offline (manual toggle or no connection): never stream — skip
+                // toward a downloaded track.
+                if (gen == generation) failTrack("Offline — not downloaded")
                 return@launch
             } else try {
                 withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }

@@ -5,13 +5,17 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.thelightphone.sdk.LightNetwork
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** One customizable entry: a stable id plus whether it is shown. */
@@ -57,7 +61,18 @@ object TidePrefs {
     val navTabs: StateFlow<List<SectionPref>> = _navTabs.asStateFlow()
 
     private val _offlineMode = MutableStateFlow(false)
+    /** The user's manual Offline-mode toggle (Settings › Playback). */
     val offlineMode: StateFlow<Boolean> = _offlineMode.asStateFlow()
+
+    /**
+     * Whether the app should behave as offline: the manual toggle OR the device
+     * actually having no usable internet (no connection / airplane mode). Use
+     * this for playback and navigation decisions; use [offlineMode] only for the
+     * settings toggle itself.
+     */
+    val offlineEffective: StateFlow<Boolean> =
+        combine(_offlineMode, LightNetwork.online) { manual, online -> manual || !online }
+            .stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _artworkNowPlaying = MutableStateFlow(false)
     val artworkNowPlaying: StateFlow<Boolean> = _artworkNowPlaying.asStateFlow()

@@ -245,10 +245,10 @@ class MainViewModel(
         viewModelScope.launch {
             if (Tidal.restore()) {
                 quality.value = Tidal.quality
-                // Offline mode: open straight to Downloads (online tabs can't load).
-                // Wait for persisted prefs so this decision is reliable at startup.
+                // Offline (manual toggle or no connection): open straight to
+                // Downloads. Wait for persisted prefs so the decision is reliable.
                 TidePrefs.loaded.first { it }
-                if (TidePrefs.offlineMode.value) tab.value = MainTab.Downloads
+                if (TidePrefs.offlineEffective.value) tab.value = MainTab.Downloads
                 session.value = Session.Ready
                 ensureLoaded(MainTab.Home)
                 ensureLoaded(MainTab.Liked)
@@ -409,7 +409,7 @@ class MainViewModel(
 
     /** The tab that acts as "home" — Downloads while offline, else the first shown tab. */
     fun homeTab(): MainTab =
-        if (TidePrefs.offlineMode.value) MainTab.Downloads else firstEnabledTab()
+        if (TidePrefs.offlineEffective.value) MainTab.Downloads else firstEnabledTab()
 
     override fun onBackPressed(): Boolean {
         if (session.value !is Session.Ready) return false
@@ -520,7 +520,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
     private fun ColumnScope.ReadyContent() {
         val tab by viewModel.tab.collectAsState()
         val navPrefs by TidePrefs.navTabs.collectAsState()
-        val offline by TidePrefs.offlineMode.collectAsState()
+        val offline by TidePrefs.offlineEffective.collectAsState()
         val enabled = navPrefs.filter { it.enabled }
 
         // If the current tab was hidden from settings, hop to "home". Downloads
