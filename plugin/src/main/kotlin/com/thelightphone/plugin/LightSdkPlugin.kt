@@ -33,6 +33,10 @@ class LightSdkPlugin : Plugin<Project> {
             "androidx.room",
             "androidx.work",
             "androidx.startup",
+            // Media3 (ExoPlayer + MediaSession) powers the detached-audio
+            // capability; it pulls in Guava transitively.
+            "androidx.media3",
+            "com.google.guava",
             "io.github.david-allison:anki-android-backend",
         )
 
