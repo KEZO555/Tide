@@ -176,6 +176,17 @@ class TrackListScreen(
                             s.value.firstOrNull()?.albumCover ?: "",
                             albumId,
                         )
+                        // Stable per-row keys so lazy recycling binds the download
+                        // spinner to the right track. A playlist can list the same
+                        // track twice, so disambiguate repeats to keep keys unique.
+                        val trackKeys = remember(s.value) {
+                            val seen = HashMap<Long, Int>()
+                            s.value.map { t ->
+                                val n = seen.getOrDefault(t.id, 0)
+                                seen[t.id] = n + 1
+                                if (n == 0) t.id else "${t.id}#$n"
+                            }
+                        }
                         if (albumId != 0L && thumbnails && headerCover.isNotBlank()) {
                             // Pinned, full-width-centered album cover (a lazy-list
                             // item would sit inside the scrollbar gutter, off-center).
@@ -197,7 +208,7 @@ class TrackListScreen(
                                     PlayHeader(tracks = s.value, showShuffle = shuffleable)
                                 }
                             }
-                            items(s.value.size) { i ->
+                            items(s.value.size, key = { trackKeys[it] }) { i ->
                                 val track = s.value[i]
                                 NumberedTrackRow(
                                     number = if (numbered) i + 1 else null,

@@ -1,6 +1,8 @@
 package com.kezo.tide.screens
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -234,6 +236,15 @@ class MainViewModel(
     val homeReleases = MutableStateFlow<UiState<List<com.kezo.tide.api.Album>>>(UiState.Loading)
 
     private val loadedTabs = HashSet<MainTab>()
+
+    // Scroll positions are held on the (retained) view model so they survive
+    // navigating into a detail screen and back, and switching between tabs —
+    // the tab composables themselves are disposed when another screen shows.
+    val homeScroll = ScrollState(0)
+    val searchScroll = ScrollState(0)
+    val likedListState = LazyListState()
+    val albumsListState = LazyListState()
+    val playlistsListState = LazyListState()
 
     init {
         Tidal.init(dataStore)
@@ -593,7 +604,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         }
         val sections by TidePrefs.homeSections.collectAsState()
         TabHeader("Home")
-        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        LightScrollView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            scrollState = viewModel.homeScroll,
+        ) {
             sections.filter { it.enabled }.forEach { pref ->
                 when (pref.id) {
                     "recents" -> HomeRecents()
@@ -845,8 +859,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
+                        listState = viewModel.likedListState,
                     ) {
-                        items(list.size) { i ->
+                        items(list.size, key = { list[it].id }) { i ->
                             val track = list[i]
                             NumberedTrackRow(
                                 number = null,
@@ -932,8 +947,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
+                        listState = viewModel.albumsListState,
                     ) {
-                        items(list.size) { i ->
+                        items(list.size, key = { list[it].id }) { i ->
                             val album = list[i]
                             MediaRow(
                                 primary = album.title,
@@ -1020,8 +1036,9 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     LightLazyScrollView(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                         uniformItemHeightGridUnits = ROW_UNITS,
+                        listState = viewModel.playlistsListState,
                     ) {
-                        items(list.size) { i ->
+                        items(list.size, key = { list[it].uuid }) { i ->
                             val playlist = list[i]
                             MediaRow(
                                 primary = playlist.title,
@@ -1263,7 +1280,10 @@ class MainScreen(sealedActivity: SealedLightActivity) :
             EmptyText("No results")
             return
         }
-        LightScrollView(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        LightScrollView(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            scrollState = viewModel.searchScroll,
+        ) {
             if (results.artists.isNotEmpty()) {
                 SectionHeader("Artists")
                 results.artists.forEach { artist ->

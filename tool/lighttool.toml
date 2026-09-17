@@ -1,8 +1,8 @@
 [tool]
 id = "com.kezo.tide"
 label = "Tide"
-versionCode = 46
-versionName = "3.2"
+versionCode = 47
+versionName = "3.3"
 permissions = ["android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"]
 # Official SDK background audio: playback keeps going / auto-advancing while Tide
 # is backgrounded, via the SDK's detached MediaSessionService. The plugin adds
