@@ -132,9 +132,9 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Trailing download state for a list row: a ring that fills with the current
- * download progress (falling back to an indeterminate spinner until the first
- * bytes land), or the downloaded arrow once it's on disk.
+ * Trailing download state for a list row: a ring that starts empty while the
+ * track is queued (about to download) and fills with the current download
+ * progress once it starts, or the downloaded arrow once it's on disk.
  */
 @Composable
 private fun DownloadIndicator(
@@ -147,16 +147,12 @@ private fun DownloadIndicator(
         .size(1.4f.gridUnitsAsDp())
         .alpha(0.75f)
     when {
-        downloading && progress != null && progress > 0f -> CircularProgressIndicator(
-            progress = { progress.coerceIn(0f, 1f) },
+        downloading -> CircularProgressIndicator(
+            // Empty ring (0f) while queued; fills as the download progresses.
+            progress = { (progress ?: 0f).coerceIn(0f, 1f) },
             color = LightThemeTokens.colors.content,
             strokeWidth = 1.5.dp,
             trackColor = LightThemeTokens.colors.contentSecondary,
-            modifier = ringModifier,
-        )
-        downloading -> CircularProgressIndicator(
-            color = LightThemeTokens.colors.content,
-            strokeWidth = 1.5.dp,
             modifier = ringModifier,
         )
         downloaded -> LightIcon(
