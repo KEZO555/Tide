@@ -1,6 +1,7 @@
 package com.thelightphone.sdk
 
 import android.content.Context
+import android.media.AudioManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -88,6 +89,11 @@ class LightActivity internal constructor() : ComponentActivity() {
             !contentReady || android.os.SystemClock.elapsedRealtime() - createdAt < 1000
         }
         super.onCreate(savedInstanceState)
+
+        // Hardware volume keys target the media stream while the tool is in the
+        // foreground, so LightOS shows its media-volume control (not the ringer)
+        // whether or not audio is currently playing.
+        volumeControlStream = AudioManager.STREAM_MUSIC
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
