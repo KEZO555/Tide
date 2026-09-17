@@ -12,33 +12,24 @@ package com.thelightphone.plugin
  * injection.
  */
 object ManifestGenerator {
-    /** Auto-added (deduped) when a tool opts into background audio. */
-    private val BACKGROUND_AUDIO_PERMISSIONS = listOf(
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.POST_NOTIFICATIONS",
-    )
-
     fun render(metadata: LightToolMetadata): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
         appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">""")
-        for (perm in metadata.permissions) {
-            appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
-        }
-        // Background-audio tools get the foreground-service permissions they need
-        // for the SDK playback service, without having to list each one.
-        if (metadata.backgroundAudio) {
-            for (perm in BACKGROUND_AUDIO_PERMISSIONS) {
-                if (perm !in metadata.permissions) {
-                    appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
-                }
+        // A capability declares what the tool does; the permissions it needs
+        // follow from that, so they are unioned in here rather than hand-written.
+        val permissions = (
+            metadata.permissions + metadata.capabilities.flatMap {
+                LightToolPolicy.CAPABILITY_IMPLIED_PERMISSIONS[it].orEmpty()
             }
+        ).distinct()
+        for (perm in permissions) {
+            appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
         }
         // Emit Play-Store-inferred hardware features as required="false" so
         // PermissionImpliesUnsupportedChromeOsHardware lint stays quiet and
         // we don't accidentally narrow the install pool. Deduped because
         // distinct permissions can map to overlapping feature sets.
-        val features = metadata.permissions
+        val features = permissions
             .flatMap { LightToolPolicy.PERMISSION_IMPLIED_FEATURES[it].orEmpty() }
             .toSet()
         for (feature in features) {
@@ -52,6 +43,13 @@ object ManifestGenerator {
         appendLine("""        <meta-data""")
         appendLine("""            android:name="com.thelightphone.sdk.LIGHT_SERVER_PACKAGE"""")
         appendLine("""            android:value="${xmlAttr(metadata.serverPackage)}" />""")
+        // Capability markers: only this generator can produce them, so the SDK
+        // trusts them at runtime as proof the tool opted into the capability.
+        for (capability in metadata.capabilities) {
+            appendLine("""        <meta-data""")
+            appendLine("""            android:name="${xmlAttr(LightToolPolicy.capabilityMarker(capability))}"""")
+            appendLine("""            android:value="true" />""")
+        }
         appendLine("""        <activity""")
         appendLine("""            android:name="com.thelightphone.sdk.LightActivity"""")
         appendLine("""            android:exported="true">""")
@@ -60,11 +58,17 @@ object ManifestGenerator {
         appendLine("""                <category android:name="android.intent.category.LAUNCHER" />""")
         appendLine("""            </intent-filter>""")
         appendLine("""        </activity>""")
-        if (metadata.backgroundAudio) {
+        // Only tools that opted into detached audio declare the SDK's media
+        // service, so a mediaPlayback claim never lands in tools that don't.
+        if (LightToolPolicy.DETACHED_AUDIO in metadata.capabilities) {
             appendLine("""        <service""")
-            appendLine("""            android:name="com.thelightphone.sdk.LightPlaybackService"""")
-            appendLine("""            android:exported="false"""")
-            appendLine("""            android:foregroundServiceType="mediaPlayback" />""")
+            appendLine("""            android:name="com.thelightphone.sdk.audio.LightAudioService"""")
+            appendLine("""            android:foregroundServiceType="mediaPlayback"""")
+            appendLine("""            android:exported="false">""")
+            appendLine("""            <intent-filter>""")
+            appendLine("""                <action android:name="androidx.media3.session.MediaSessionService" />""")
+            appendLine("""            </intent-filter>""")
+            appendLine("""        </service>""")
         }
         appendLine("""        <receiver""")
         appendLine("""            android:name="com.thelightphone.sdk.LightSdkReceiver"""")

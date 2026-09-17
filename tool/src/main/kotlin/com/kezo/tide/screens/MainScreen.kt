@@ -434,6 +434,11 @@ class MainViewModel(
 class MainScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, MainViewModel>(sealedActivity) {
 
+    init {
+        // Give the player the SDK handle it needs for detached background audio.
+        TidePlayer.attach(sealedActivity)
+    }
+
     override val viewModelClass: Class<MainViewModel>
         get() = MainViewModel::class.java
 

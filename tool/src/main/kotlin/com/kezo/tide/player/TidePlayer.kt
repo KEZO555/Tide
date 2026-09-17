@@ -1,43 +1,58 @@
 package com.kezo.tide.player
 
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import com.kezo.tide.TidePrefs
 import com.kezo.tide.api.Tidal
 import com.kezo.tide.api.Track
 import com.kezo.tide.ui.PlayerPresence
 import com.thelightphone.sdk.LightAppState
-import com.thelightphone.sdk.LightBackgroundAudio
+import com.thelightphone.sdk.SealedLightActivity
+import com.thelightphone.sdk.audio.DefaultLightAudio
+import com.thelightphone.sdk.audio.LightAudioItem
+import com.thelightphone.sdk.audio.LightAudioPlayback
+import com.thelightphone.sdk.audio.LightAudioPlayer
+import com.thelightphone.sdk.audio.LightAudioSource
+import com.thelightphone.sdk.audio.LightMediaMetadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 enum class RepeatMode { OFF, ALL, ONE }
 
 /**
- * Queue + playback engine on top of [android.media.MediaPlayer].
+ * Queue + playback engine on top of the Light SDK's detached audio player
+ * ([LightAudioPlayer] with [LightAudioPlayback.Detached]).
  *
- * The Light SDK currently has no background-audio service API, so playback
- * lives with the tool process: it keeps playing while the tool is open and
- * pauses when LightOS pauses the tool.
+ * The SDK owns a foreground [com.thelightphone.sdk.audio.LightAudioService], so
+ * playback (and auto-advance to the next track) keeps going while Tide is
+ * backgrounded or the screen is off, and the system media notification / lock
+ * screen mirror what's playing. Tide keeps its own queue, shuffle, repeat and
+ * offline logic here and drives the SDK player one track at a time, resolving
+ * each track's source lazily (a local download when present, otherwise a stream
+ * URL) exactly as before.
+ *
+ * Requires `capabilities = ["detached-audio"]` in `lighttool.toml`.
  */
 object TidePlayer {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private var player: MediaPlayer? = null
+    private var sealedActivity: SealedLightActivity? = null
+    private var player: LightAudioPlayer? = null
     private var loadJob: Job? = null
     private var generation = 0
-    private var prepared = false
+
+    /** The generation currently playing (armed once the SDK reports playing). */
+    private var armedGen = -1
+    /** The generation we've already ended/failed, so it can't advance twice. */
+    private var terminalGen = -1
 
     /** Consecutive load/playback failures, so auto-skip can't loop forever. */
     private var consecutiveErrors = 0
@@ -72,82 +87,84 @@ object TidePlayer {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private val _volume = MutableStateFlow(1f)
-    val volume: StateFlow<Float> = _volume.asStateFlow()
-
-    /** In-app volume multiplier (0..1); hardware keys still set system volume. */
-    fun setVolume(value: Float) {
-        val v = value.coerceIn(0f, 1f)
-        _volume.value = v
-        runCatching { player?.setVolume(v, v) }
-    }
-
     private var originalQueue: List<Track> = emptyList()
 
-    init {
-        // Poll position only while playing AND a player screen is visible.
-        // Nothing else reads positionMs, so during background / screen-off
-        // playback this collector stays suspended — no periodic wakeups. 1s
-        // cadence is enough for the seconds-resolution scrubber and time label.
+    /** A track is "finished" when the SDK stops playing within this of its end. */
+    private const val END_EPS_MS = 1500L
+
+    /**
+     * Give the player the SDK handle it needs to build the detached audio
+     * player. Called from the root screen; safe to call more than once.
+     */
+    fun attach(activity: SealedLightActivity) {
+        sealedActivity = activity
+    }
+
+    /**
+     * Lazily build the one detached SDK player for the process and wire its
+     * state back into our flows. Returns null if we have no SDK handle yet or
+     * the detached-audio capability is missing.
+     */
+    private fun ensurePlayer(): LightAudioPlayer? {
+        player?.let { return it }
+        val sealed = sealedActivity ?: return null
+        val p = try {
+            DefaultLightAudio(sealed).newPlayer(playback = LightAudioPlayback.Detached)
+        } catch (e: Throwable) {
+            _error.value = e.message ?: "couldn't start audio"
+            return null
+        }
+        player = p
+        observePlayer(p)
+        return p
+    }
+
+    private fun observePlayer(p: LightAudioPlayer) {
+        // Playing state drives our flag and, on a natural end, auto-advance.
+        // This is event-driven (not polled), so it fires even while backgrounded.
         scope.launch {
-            combine(
-                _isPlaying,
-                PlayerPresence.openCountFlow,
-                LightAppState.foreground,
-            ) { playing, open, foreground ->
-                playing && open > 0 && foreground
-            }.collectLatest { active ->
-                while (active && isActive) {
-                    val p = player
-                    if (p != null && prepared) {
-                        runCatching { _positionMs.value = p.currentPosition }
+            p.isPlaying.collect { playing ->
+                if (playing) {
+                    _isPlaying.value = true
+                    _isLoading.value = false
+                    consecutiveErrors = 0
+                    armedGen = generation
+                } else {
+                    _isPlaying.value = false
+                    val g = generation
+                    if (armedGen == g && terminalGen != g) {
+                        val dur = p.durationMs.value
+                        val pos = p.positionMs.value
+                        if (dur > 0 && pos >= dur - END_EPS_MS) {
+                            terminalGen = g
+                            onTrackEnded()
+                        }
                     }
-                    delay(1000)
                 }
             }
         }
-
-        // Background playback: let the SDK's foreground media service mirror what
-        // we're playing, so LightOS keeps our process alive and auto-advance
-        // works while backgrounded. Notification transport controls route back
-        // here.
-        LightBackgroundAudio.configure(object : LightBackgroundAudio.Controller {
-            override fun onTogglePlay() = toggle()
-            override fun onNext() = next()
-            override fun onPrevious() = previous()
-        })
+        // Mirror position only while a player screen is visible and foregrounded,
+        // so we don't churn UI state during background playback.
         scope.launch {
-            combine(_current, _isPlaying) { track, playing -> track to playing }
-                .collect { (track, playing) ->
-                    if (track != null) {
-                        LightBackgroundAudio.update(
-                            LightBackgroundAudio.NowPlaying(
-                                title = track.title,
-                                artist = track.artist,
-                                isPlaying = playing,
-                            )
-                        )
-                    }
+            combine(PlayerPresence.openCountFlow, LightAppState.foreground) { open, fg ->
+                open > 0 && fg
+            }.collectLatest { visible ->
+                if (!visible) return@collectLatest
+                p.positionMs.collect { _positionMs.value = it.toInt() }
+            }
+        }
+        scope.launch {
+            p.durationMs.collect { if (it > 0) _durationMs.value = it.toInt() }
+        }
+        scope.launch {
+            p.error.collect { err ->
+                val g = generation
+                if (err != null && terminalGen != g) {
+                    terminalGen = g
+                    failTrack(err.diagnostic)
                 }
+            }
         }
-    }
-
-    private fun ensurePlayer(): MediaPlayer {
-        player?.let { return it }
-        val p = MediaPlayer()
-        p.setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build()
-        )
-        p.setOnCompletionListener { onTrackEnded() }
-        p.setOnErrorListener { _, _, _ ->
-            failTrack("playback error")
-            true
-        }
-        player = p
-        return p
     }
 
     fun play(tracks: List<Track>, startIndex: Int = 0) {
@@ -250,44 +267,44 @@ object TidePlayer {
         _isLoading.value = true
         _isPlaying.value = false
         _error.value = null
-        prepared = false
         Recents.record(track)
 
         loadJob = scope.launch {
             // Prefer an offline download; only hit the network when there isn't one.
             val local = Downloads.localPath(track.id)
-            val url = if (local != null) {
-                local
+            val source = if (local != null) {
+                LightAudioSource.FileSource(File(local))
             } else if (TidePrefs.offlineEffective.value) {
                 // Offline (manual toggle or no connection): never stream — skip
                 // toward a downloaded track.
                 if (gen == generation) failTrack("Offline — not downloaded")
                 return@launch
-            } else try {
-                withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }
-            } catch (e: Exception) {
-                if (gen == generation) failTrack(e.message ?: "couldn't load track")
-                return@launch
+            } else {
+                val url = try {
+                    withContext(Dispatchers.IO) { Tidal.streamUrl(track.id) }
+                } catch (e: Exception) {
+                    if (gen == generation) failTrack(e.message ?: "couldn't load track")
+                    return@launch
+                }
+                LightAudioSource.UrlSource(url)
             }
             if (gen != generation) return@launch
             val p = ensurePlayer()
-            runCatching {
-                p.reset()
-                p.setDataSource(url)
-                p.setOnPreparedListener {
-                    if (gen != generation) return@setOnPreparedListener
-                    prepared = true
-                    consecutiveErrors = 0
-                    _durationMs.value = if (it.duration > 0) it.duration else track.durationSec * 1000
-                    it.setVolume(_volume.value, _volume.value)
-                    it.start()
-                    _isLoading.value = false
-                    _isPlaying.value = true
-                }
-                p.prepareAsync()
-            }.onFailure {
-                if (gen == generation) failTrack("couldn't start playback")
+            if (p == null) {
+                if (gen == generation) failTrack("audio unavailable")
+                return@launch
             }
+            val item = LightAudioItem(
+                source = source,
+                metadata = LightMediaMetadata(
+                    title = track.title,
+                    artist = track.artist,
+                    album = track.albumTitle,
+                    durationMs = (track.durationSec * 1000L).takeIf { it > 0 },
+                ),
+            )
+            p.setMediaQueue(listOf(item))
+            p.play()
         }
     }
 
@@ -311,15 +328,10 @@ object TidePlayer {
 
     fun toggle() {
         val p = player ?: return
-        if (!prepared) return
-        runCatching {
-            if (p.isPlaying) {
-                p.pause()
-                _isPlaying.value = false
-            } else {
-                p.start()
-                _isPlaying.value = true
-            }
+        if (_isPlaying.value) {
+            p.pause()
+        } else if (_current.value != null) {
+            p.play()
         }
     }
 
@@ -331,7 +343,7 @@ object TidePlayer {
             nextIndex < q.size -> startTrack(nextIndex)
             _repeat.value == RepeatMode.ALL -> startTrack(0)
             else -> {
-                runCatching { player?.pause() }
+                player?.pause()
                 _isPlaying.value = false
             }
         }
@@ -347,11 +359,9 @@ object TidePlayer {
 
     fun seekTo(ms: Int) {
         val p = player ?: return
-        if (!prepared) return
-        runCatching {
-            p.seekTo(ms.coerceIn(0, _durationMs.value))
-            _positionMs.value = ms.coerceIn(0, _durationMs.value)
-        }
+        val clamped = ms.coerceIn(0, _durationMs.value)
+        p.seekTo(clamped.toLong())
+        _positionMs.value = clamped
     }
 
     fun seekToFraction(fraction: Float) {
@@ -392,15 +402,14 @@ object TidePlayer {
     }
 
     fun pause() {
-        runCatching { if (player?.isPlaying == true) player?.pause() }
+        player?.pause()
         _isPlaying.value = false
     }
 
     fun stop() {
         generation++
         loadJob?.cancel()
-        runCatching { player?.reset() }
-        prepared = false
+        player?.stop()
         _queue.value = emptyList()
         _index.value = -1
         _current.value = null
@@ -408,6 +417,5 @@ object TidePlayer {
         _isLoading.value = false
         _positionMs.value = 0
         _durationMs.value = 0
-        LightBackgroundAudio.stop()
     }
 }

@@ -29,7 +29,6 @@ open class LightSdkApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        LightBackgroundAudio.attachContext(this)
         LightNetwork.attach(this)
         val serverPackage = readServerPackage()
         invokeEntryPoint()
