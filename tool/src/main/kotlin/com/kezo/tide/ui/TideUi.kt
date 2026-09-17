@@ -132,19 +132,32 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Trailing download state for a list row: a spinning loading circle while the
- * track/album is downloading, or the downloaded arrow once it's on disk.
+ * Trailing download state for a list row: a ring that fills with the current
+ * download progress (falling back to an indeterminate spinner until the first
+ * bytes land), or the downloaded arrow once it's on disk.
  */
 @Composable
-private fun DownloadIndicator(downloading: Boolean, downloaded: Boolean) {
+private fun DownloadIndicator(
+    downloading: Boolean,
+    downloaded: Boolean,
+    progress: Float? = null,
+) {
+    val ringModifier = Modifier
+        .padding(start = 0.5f.gridUnitsAsDp())
+        .size(1.4f.gridUnitsAsDp())
+        .alpha(0.75f)
     when {
+        downloading && progress != null && progress > 0f -> CircularProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            color = LightThemeTokens.colors.content,
+            strokeWidth = 1.5.dp,
+            trackColor = LightThemeTokens.colors.contentSecondary,
+            modifier = ringModifier,
+        )
         downloading -> CircularProgressIndicator(
             color = LightThemeTokens.colors.content,
             strokeWidth = 1.5.dp,
-            modifier = Modifier
-                .padding(start = 0.5f.gridUnitsAsDp())
-                .size(1.4f.gridUnitsAsDp())
-                .alpha(0.75f),
+            modifier = ringModifier,
         )
         downloaded -> LightIcon(
             icon = LightIcons.DOWNLOADED_ARROW,
@@ -169,6 +182,7 @@ fun NumberedTrackRow(
     active: Boolean = false,
     downloaded: Boolean = false,
     downloading: Boolean = false,
+    downloadProgress: Float? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -235,7 +249,11 @@ fun NumberedTrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        DownloadIndicator(downloading = downloading, downloaded = downloaded)
+        DownloadIndicator(
+            downloading = downloading,
+            downloaded = downloaded,
+            progress = downloadProgress,
+        )
     }
 }
 
@@ -259,6 +277,7 @@ fun MediaRow(
     cover: String? = null,
     downloaded: Boolean = false,
     downloading: Boolean = false,
+    downloadProgress: Float? = null,
 ) {
     val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
     Row(
@@ -296,7 +315,11 @@ fun MediaRow(
                 )
             }
         }
-        DownloadIndicator(downloading = downloading, downloaded = downloaded)
+        DownloadIndicator(
+            downloading = downloading,
+            downloaded = downloaded,
+            progress = downloadProgress,
+        )
     }
 }
 

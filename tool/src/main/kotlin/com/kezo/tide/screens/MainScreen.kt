@@ -701,6 +701,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val current by TidePlayer.current.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val progressById by Downloads.progress.collectAsState()
         HomeSectionHeader("Recently Played")
         if (recents.isEmpty()) {
             LightText(
@@ -717,6 +718,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                     active = current?.id == track.id,
                     downloaded = track.id in downloadedIds,
                     downloading = track.id in downloadingIds,
+                    downloadProgress = progressById[track.id],
                     onClick = {
                         TidePlayer.play(recents, i)
                         navigateTo({ PlayerScreen(it) })
@@ -842,6 +844,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val current by TidePlayer.current.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val progressById by Downloads.progress.collectAsState()
         TabHeader("Liked Songs")
         when (val s = state) {
             is UiState.Loading -> LoadingText()
@@ -869,6 +872,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                                 active = current?.id == track.id,
                                 downloaded = track.id in downloadedIds,
                                 downloading = track.id in downloadingIds,
+                                downloadProgress = progressById[track.id],
                                 onClick = {
                                     TidePlayer.play(list, i)
                                     navigateTo({ PlayerScreen(it) })
@@ -1274,6 +1278,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
         val downloadingAlbumIds by Downloads.downloadingAlbumIds.collectAsState()
+        val progressById by Downloads.progress.collectAsState()
         val empty = results.tracks.isEmpty() && results.albums.isEmpty() &&
             results.artists.isEmpty() && results.playlists.isEmpty()
         if (empty) {
@@ -1323,6 +1328,7 @@ class MainScreen(sealedActivity: SealedLightActivity) :
                         active = currentTrackId == track.id,
                         downloaded = track.id in downloadedIds,
                         downloading = track.id in downloadingIds,
+                        downloadProgress = progressById[track.id],
                         onClick = {
                             TidePlayer.play(results.tracks, i)
                             navigateTo({ PlayerScreen(it) })

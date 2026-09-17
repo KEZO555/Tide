@@ -143,6 +143,7 @@ class TrackListScreen(
         val albumFav by viewModel.albumFav.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val progressById by Downloads.progress.collectAsState()
         val thumbnails by TidePrefs.artworkThumbnails.collectAsState()
 
         TideScreen {
@@ -216,6 +217,7 @@ class TrackListScreen(
                                     active = current?.id == track.id,
                                     downloaded = track.id in downloadedIds,
                                     downloading = track.id in downloadingIds,
+                                    downloadProgress = progressById[track.id],
                                     onClick = {
                                         TidePlayer.play(s.value, i)
                                         navigateTo({ PlayerScreen(it) })

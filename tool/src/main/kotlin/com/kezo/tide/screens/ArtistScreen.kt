@@ -115,6 +115,7 @@ class ArtistScreen(
         val current by TidePlayer.current.collectAsState()
         val downloadedIds by Downloads.downloadedIds.collectAsState()
         val downloadingIds by Downloads.downloadingIds.collectAsState()
+        val progressById by Downloads.progress.collectAsState()
 
         TideScreen {
             LightTopBar(
@@ -139,6 +140,7 @@ class ArtistScreen(
                                 active = current?.id == track.id,
                                 downloaded = track.id in downloadedIds,
                                 downloading = track.id in downloadingIds,
+                                downloadProgress = progressById[track.id],
                                 onClick = {
                                     TidePlayer.play(s.value, i)
                                     if (PlayerPresence.openCount == 0) {
